@@ -33,7 +33,8 @@
     <replaceregexp flags="g" file="${build.dir}/TAG" match="\." replace="_" />
     <loadproperties srcFile="${build.dir}/TAG"/>
     <delete file="${build.dir}/TAG" />
-    <property name="tag" value="V_${mytag}_BUILD_${build.number}" />
+    <!--<property name="tag" value="V_${mytag}_BUILD_${build.number}" />-->
+  	<property name="tag" value="${mytag}" />
 
     <loadproperties srcFile="${build.dir}/build.properties"/>
 
@@ -50,6 +51,7 @@
     <echo message="GIT    : ${git.revision}" />
 
     <replaceregexp file="${src.dir}/de/northtommy/hibiscus/syncNorthTommy/Version.java" match="BUILD = &quot;[^&quot;]+&quot;" replace="BUILD = &quot;${git.revision}&quot;" />
+  	<replaceregexp file="${src.dir}/de/northtommy/hibiscus/syncNorthTommy/Version.java" match="VERSION = &quot;[^&quot;]+&quot;" replace="VERSION = &quot;${plugin.version}&quot;" />
 
     <path id="compilepath">
       <pathelement path="${define.compilepath}" />

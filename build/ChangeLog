@@ -1,0 +1,9 @@
+hibiscus.syncNorthTommy
+
+Hibiscus-Sync-Plugin für diverse Banken
+
+Unterstützung für den Umsatz- und Saldoabruf bei folgenden Banken
+ - Amazon VISA (Zinia-Bank)
+ 
+Version		Date			Change
+0.1.0		2025-07-29		Initial version
