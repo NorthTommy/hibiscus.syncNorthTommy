@@ -1,2 +1,6 @@
 /.settings
 /releases
+/*.bak
+/build/BUILD
+/releases/*
+/lib/*.jar
