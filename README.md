@@ -15,11 +15,11 @@ Konten müssen von Hand angelegt werden, dafür unter **Konten** auf **Konto man
 ### Amazon VISA
 hier muss nur die Kundenkennung mit dem Benutzernamen fürs Onlinebanking gefüllt und im Dropdown **Zugangsweg** *Amazon VISA (Zinia)* ausgewählt werden.
 Die Unterkontonummer muss den letzten 4 Ziffern der VISA-Karte entsprechen.
-Damit sollte es auch möglich sein mehrere VISA-Karten mit einem Benutzernamen zu verwalten indem man mehrere Konten anlegt, die versch. Unterkontennummern habenür erst Email, dann SMS, dann App (ja, ich kann Banking-Apps nicht leiden!). Durch Umstellen der Buchstaben sind andere Prios möglich.
 
 ## Bekannte Probleme / Einschränkungen
-- Mit ist nur der Weg mittels SMS für die 90-Tage-Grenze an alten Umsätzen bekannt. Nichts anderes wurde getestet
-- Mehre Karten (falls von Zinia unterstützt) wurde nicht getestet, sollte von der Idee her aber gehen.
-- reine Amazon-Punkte-Transaktionen werden ignoriert
-- Punkte-Sammlungen werden aktuell noch nicht z.B. im Notizfeld vermerkt
+- Mit ist nur der Weg mittels SMS für die 90-Tage-Grenze an alten Umsätzen bekannt. Nichts anderes wurde getestet.
+- Mehrere Karten (falls von Zinia unterstützt) wurde nicht getestet, gerne testen und rückmelden (mittels Unterkonten sollte es con der Idee gehen, solange die abrufbaren Transaktionen alle Karten beinhalten).
+- Amazon-Punkte-Sammlungen werden aktuell noch nicht z.B. im Notizfeld vermerkt
+- Info: reine Amazon-Punkte-Transaktionen (0,- EUR) werden ignoriert
+
 
