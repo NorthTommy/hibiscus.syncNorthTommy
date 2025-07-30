@@ -18,6 +18,8 @@ import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJobKontoauszug;
 import de.northtommy.hibiscus.syncNorthTommy.WebResult;
 import de.willuhn.datasource.rmi.DBIterator;
 import de.willuhn.jameica.hbci.Settings;
+import de.willuhn.jameica.hbci.messaging.ObjectChangedMessage;
+import de.willuhn.jameica.hbci.messaging.ObjectDeletedMessage;
 import de.willuhn.jameica.hbci.messaging.SaldoMessage;
 import de.willuhn.jameica.hbci.rmi.Konto;
 import de.willuhn.jameica.hbci.rmi.Umsatz;
@@ -162,8 +164,10 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 					log(Level.DEBUG, "Karte laut Unterkonto gefunden (letzten 4 Stellen) " + last4DigitsPan + " als ID: ..." + cardId[0].substring(cardId[0].length()-6));
 					
 					if (fetchSaldo) {
-						double saldoValue = jo.getJSONObject("creditDetails").getDouble("currentAmountAuthorized");
+						//double saldoValue = jo.getJSONObject("creditDetails").getDouble("currentAmountAuthorized");
+						double saldoValue = jo.getJSONObject("creditDetails").getDouble("currentBalance");
 						konto.setSaldo(-1.0 * saldoValue);
+						
 						double cashCreditAvail = jo.getJSONObject("creditDetails").getDouble("cashCreditAvail");
 						konto.setSaldoAvailable(cashCreditAvail);
 
@@ -206,6 +210,9 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 				 */
 				var neueUmsaetze = new ArrayList<Umsatz>();
 				
+				double calculatedSaldo[] = { konto.getSaldo() };
+				var duplikate = new ArrayList<Umsatz>();
+				
 				log(Level.INFO, "Kontoauszug abrufen...");
 				
 				// we need a final variable for lambda functions
@@ -244,6 +251,8 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							
 							// we start from beginning with getting transactions
 							neueUmsaetze.clear();
+							// restart with salso calc as well
+							calculatedSaldo[0] = konto.getSaldo();
 						}
 						
 						if (monitorComplete < 80) {
@@ -346,6 +355,10 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 								log(Level.TRACE,"Ueberspringe kartenfremde Transaktion " + sRCardId + " vs. " + cardId[0]);
 								return;
 							}
+							
+							// transaction belongs to card related to current konto
+							
+							var sRTransactionStatusCode = sR.optString("transactionStatusCode");
 							var sRDate = sR.getString("dateTime");	// Datum des Umsatzes
 							// assume: C: Credit (Income)  D: Debit (Outgoing)   notr present: Amazon-Punkte
 							String sRTransactionTypeCode = sR.optString("transactionTypeCode");
@@ -374,11 +387,21 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							var sRAmount = sRFirstAmount.getDouble("totalAmount");
 							// assume: alle Umsätze in EUR abgerechnet -> nur fürs logging
 							var sRAmountCurr = sRFirstAmount.getString("currency");
-							log(Level.TRACE, "TransId: " + sRId + "\n   date: " + sRDate + "\n   descr: " + sRDescr[0] + "\n   Amount: " + sRAmount + sRAmountCurr);
+							log(Level.TRACE, "TransId: " + sRId + "\n   date: " + sRDate + "\n   descr: " + sRDescr[0] + "\n   Amount: " + sRAmount + sRAmountCurr +
+									"\n   TypeCode: " + sRTransactionTypeCode + "\n   StatusCode: " + sRTransactionStatusCode);
 							
 							var newUmsatz = (Umsatz) Settings.getDBService().createObject(Umsatz.class,null);
 							newUmsatz.setKonto(konto);
 							newUmsatz.setTransactionId(sRId);
+							if (sRTransactionStatusCode.equals("AUTHORIZED")) {
+								// transaction still not 
+								newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
+								// excluded from saldo setting
+							} else {
+								newUmsatz.setSaldo(calculatedSaldo[0]);
+								calculatedSaldo[0] -= sRAmount;
+								
+							}
 							
 							// Hier besteht Unklarheit über die Codes
 							if (sRTransactionTypeCode.equals("C")) {
@@ -390,8 +413,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							newUmsatz.setDatum(dateFormat.parse(sRDate));
 							var sRDateValuta = sR.optString("settlementDate");	// Sattlement >= date -> Valuta
 							if (!sRDateValuta.isEmpty()) {
-								
-								// sometimes no sattlement date is given -> try catch
+								// sometimes no sattlement date is given
 								Date d1 = newUmsatz.getDatum();
 								Date d2 = dateFormatValuta.parse(sRDateValuta);
 								if ((d1.getYear() != d2.getYear()) || (d1.getMonth() != d2.getMonth()) || (d1.getDate() != d2.getDate())) {
@@ -404,26 +426,66 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							}
 							newUmsatz.setZweck(sRDescr[0]);
 							
-							// check if new record is already known in stored records
-							if (getDuplicateById(newUmsatz) != null)
-							{
+							try {
+								newUmsatz.setCustomerRef(sR.optJSONObject("merchantDetails").optString("id"));
+							} catch (Exception e) {}
+							//newUmsatz.setMandateId()
+							//newUmsatz.setCreditorId()
+							
+							
+							
+							var duplicate = getDuplicateByCompare(newUmsatz); 
+							if (duplicate != null)
+							{		                		
 								duplikateGefunden[0] = true;
+								if (duplicate.hasFlag(Umsatz.FLAG_NOTBOOKED))
+								{
+									// compare by datum, id, betrag -> daher kein update
+									duplicate.setFlags(newUmsatz.getFlags());
+									duplicate.setSaldo(newUmsatz.getSaldo());
+									duplicate.setWeitereVerwendungszwecke(newUmsatz.getWeitereVerwendungszwecke());
+
+									duplicate.setGegenkontoBLZ(newUmsatz.getGegenkontoBLZ());
+									duplicate.setGegenkontoName(newUmsatz.getGegenkontoName());
+									duplicate.setGegenkontoNummer(newUmsatz.getGegenkontoNummer());
+									duplicate.setValuta(newUmsatz.getValuta());
+									duplicate.setArt(newUmsatz.getArt());
+									duplicate.setCreditorId(newUmsatz.getCreditorId());
+									duplicate.setMandateId(newUmsatz.getMandateId());
+									duplicate.setCustomerRef(newUmsatz.getCustomerRef());
+									duplicate.store();
+									duplikate.add(duplicate);
+									Application.getMessagingFactory().sendMessage(new ObjectChangedMessage(duplicate));
+								}
 							}
 							else
 							{
-								// there might be duplicates during received, still not stored transactions - so check for ID as well
-								boolean tmpDup[] = { false };
-								neueUmsaetze.forEach(nu -> {
-									try {
-										if (nu.getTransactionId().equals(newUmsatz.getTransactionId())) {
-											tmpDup[0] = true;
-										}
-									} catch (Exception e) {}
-								});
-								if (!tmpDup[0]) {
-									neueUmsaetze.add(newUmsatz);
-								}
+								neueUmsaetze.add(newUmsatz);
 							}
+							
+							
+							
+							
+							// check if new record is already known in stored records
+//							if (getDuplicateById(newUmsatz) != null)
+//							{
+//								duplikateGefunden[0] = true;
+//							}
+//							else
+//							{
+//								// there might be duplicates during received, still not stored transactions - so check for ID as well
+//								boolean tmpDup[] = { false };
+//								neueUmsaetze.forEach(nu -> {
+//									try {
+//										if (nu.getTransactionId().equals(newUmsatz.getTransactionId())) {
+//											tmpDup[0] = true;
+//										}
+//									} catch (Exception e) {}
+//								});
+//								if (!tmpDup[0]) {
+//									neueUmsaetze.add(newUmsatz);
+//								}
+//							}
 						}
 						catch (Exception ex)
 						{
@@ -442,6 +504,27 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 				log(Level.INFO, "Kontoauszug erfolgreich. Importiere Daten ...");
 
 				reverseImport(neueUmsaetze);
+				
+				
+				monitorComplete = 95;
+				monitor.setPercentComplete(monitorComplete);
+				log(Level.INFO, "Import erfolgreich. Pr\u00FCfe Reservierungen ...");
+				
+				umsaetze.begin();
+				while (umsaetze.hasNext())
+				{
+					Umsatz umsatz = umsaetze.next();
+					if (umsatz.hasFlag(Umsatz.FLAG_NOTBOOKED))
+					{
+						if (!duplikate.contains(umsatz))
+						{
+							var id = umsatz.getID();
+							umsatz.delete();
+							Application.getMessagingFactory().sendMessage(new ObjectDeletedMessage(umsatz, id));
+						}
+					}
+				}
+				
 			} // if (fetchUmsatz)
 			
 		} // overall try/catch from starting after login-state

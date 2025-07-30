@@ -4,8 +4,8 @@
   xsi:noNamespaceSchemaLocation="http://www.willuhn.de/schema/jameica-repository-1.0.xsd"
   name="Updates für hibiscus.syncNorthTommy Jameica-Plugin">
  
-   <plugins name="hibiscus.syncNorthTommy" certificate="https://www.gnampf.cyou/hibiscus/hibiscus.syncNorthTommy.update-pem.crt">
-     <plugin url="https://github.com/NorthTommy/hibiscus.syncNorthTommy/releases/download/0_1_0" />
+   <plugins name="hibiscus.syncNorthTommy" certificate="https://northtommy.linkpc.net/hibiscus/hibkey.cer">
+     <plugin url="https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.1.0" />
    </plugins>
 
  

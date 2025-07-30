@@ -6,7 +6,7 @@
         name="hibiscus.syncNorthTommy" version="0.1.0" class="de.northtommy.hibiscus.syncNorthTommy.Plugin">
 
   <description>Hibiscus Plugin zur Kontensynchronisation für Amazon VISA (Zinia Bank)</description>
-  <url>https://github.com/NorthTommy/hibiscus.syncNorthTommy/releases/download/0_1_0/hibiscus.syncNorthTommy.zip</url>
+  <url>https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.1.0/hibiscus.syncNorthTommy.zip</url>
   <homepage>https://github.com/NorthTommy/hibiscus.syncNorthTommy</homepage>
   <license>GPL - http://www.gnu.org/copyleft/gpl.html</license>
 
