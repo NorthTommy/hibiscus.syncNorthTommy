@@ -17,9 +17,10 @@ hier muss nur die Kundenkennung mit dem Benutzernamen fürs Onlinebanking gefül
 Die Unterkontonummer muss den letzten 4 Ziffern der VISA-Karte entsprechen.
 
 ## Bekannte Probleme / Einschränkungen
-- Mit ist nur der Weg mittels SMS für die 90-Tage-Grenze an alten Umsätzen bekannt. Nichts anderes wurde getestet.
+- Mir ist nur der Weg mittels SMS für die 90-Tage-Grenze an alten Umsätzen bekannt. Nichts anderes wurde getestet.
 - Mehrere Karten (falls von Zinia unterstützt) wurde nicht getestet, gerne testen und rückmelden (mittels Unterkonten sollte es con der Idee gehen, solange die abrufbaren Transaktionen alle Karten beinhalten).
-- Amazon-Punkte-Sammlungen werden aktuell noch nicht z.B. im Notizfeld vermerkt
-- Info: reine Amazon-Punkte-Transaktionen (0,- EUR) werden ignoriert
+- Amazon-Punkte-Sammlungen werden aktuell nicht z.B. im Notizfeld vermerkt
+- Reine Amazon-Punkte-Transaktionen (0,- EUR) werden ignoriert
+- Zwischensaldo jeder Buchung ist nur eine Momentanaufnahme zum Zeitpunkt der Synchonisierung und ergebt keinen Anspruch auf Korrektheit/Aktualisierung wenn nachträglich (Valuta neuer) Umsätze abgerechnet (Autorisierungen) oder gelöscht (Reservierungen) werden. 
 
 

@@ -210,23 +210,20 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 				 */
 				var neueUmsaetze = new ArrayList<Umsatz>();
 				
+				// we need a final variables for lambda functions, so for fast create arrays with only single entry
+				
 				double calculatedSaldo[] = { konto.getSaldo() };
-				var duplikate = new ArrayList<Umsatz>();
-				
-				log(Level.INFO, "Kontoauszug abrufen...");
-				
-				// we need a final variable for lambda functions
-				boolean duplikateGefunden[] = { false };
+				ArrayList<Umsatz> duplicatesRxNotBooked = new ArrayList<Umsatz>();
+				boolean duplicateRxFound[] = { false };
 				// within response the next cursor is set; first call without next cursor starts with first record
 				String transactionNextCursor = "";
 				
-				var dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-				//dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-				//var dateFormatValuta = new SimpleDateFormat("yyyy-MM-dd");
-				//dateFormatValuta.setTimeZone(TimeZone.getTimeZone("UTC"));
+				SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 				
-				var transactionHasPendingRecords = false;
-				var requestCounterAfterSCA = 0;
+				boolean transactionHasPendingRecords = false;
+				int requestCounterAfterSCA = 0;
+				
+				log(Level.INFO, "Kontoauszug abrufen...");
 				
 				do {
 					// Perform first transactions request
@@ -441,7 +438,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							if (duplicate != null)
 							{	
 								log(Level.DEBUG,"duplicate gefunden");
-								duplikateGefunden[0] = true;
+								duplicateRxFound[0] = true;
 								if (duplicate.hasFlag(Umsatz.FLAG_NOTBOOKED))
 								{
 									// compare by datum, id, betrag -> daher kein update
@@ -458,7 +455,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 									duplicate.setMandateId(newUmsatz.getMandateId());
 									duplicate.setCustomerRef(newUmsatz.getCustomerRef());
 									duplicate.store();
-									duplikate.add(duplicate);
+									duplicatesRxNotBooked.add(duplicate);
 									Application.getMessagingFactory().sendMessage(new ObjectChangedMessage(duplicate));
 								}
 							}
@@ -467,29 +464,6 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 								neueUmsaetze.add(newUmsatz);
 							}
 							
-							
-							
-							
-							// check if new record is already known in stored records
-//							if (getDuplicateById(newUmsatz) != null)
-//							{
-//								duplikateGefunden[0] = true;
-//							}
-//							else
-//							{
-//								// there might be duplicates during received, still not stored transactions - so check for ID as well
-//								boolean tmpDup[] = { false };
-//								neueUmsaetze.forEach(nu -> {
-//									try {
-//										if (nu.getTransactionId().equals(newUmsatz.getTransactionId())) {
-//											tmpDup[0] = true;
-//										}
-//									} catch (Exception e) {}
-//								});
-//								if (!tmpDup[0]) {
-//									neueUmsaetze.add(newUmsatz);
-//								}
-//							}
 						}
 						catch (Exception ex)
 						{
@@ -499,7 +473,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 					}); // forEarch records
 					
 				
-				} while ( ( !duplikateGefunden[0] ) && 
+				} while ( ( !duplicateRxFound[0] ) && 
 						  ( !transactionNextCursor.isBlank() || transactionHasPendingRecords ) 
 						);
 				
@@ -520,7 +494,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 					Umsatz umsatz = umsaetze.next();
 					if (umsatz.hasFlag(Umsatz.FLAG_NOTBOOKED))
 					{
-						if (!duplikate.contains(umsatz))
+						if (!duplicatesRxNotBooked.contains(umsatz))
 						{
 							var id = umsatz.getID();
 							umsatz.delete();

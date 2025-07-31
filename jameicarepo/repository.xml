@@ -5,7 +5,7 @@
   name="Updates für hibiscus.syncNorthTommy Jameica-Plugin">
  
    <plugins name="hibiscus.syncNorthTommy" certificate="https://northtommy.linkpc.net/hibiscus/hibkey.cer">
-     <plugin url="https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.1.0" />
+     <plugin url="https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.1.1" />
    </plugins>
 
  
