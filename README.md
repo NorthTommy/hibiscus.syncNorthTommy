@@ -13,7 +13,9 @@ Entweder das Plugin als ZIP-File aus den Github-Releases in Hibiscus importieren
 Konten müssen von Hand angelegt werden, dafür unter **Konten** auf **Konto manuell anlegen** gehen. Keinen Haken bei **Offline-Konto** setzen!
 
 ### Amazon VISA
-hier muss nur die Kundenkennung mit dem Benutzernamen fürs Onlinebanking gefüllt und im Dropdown **Zugangsweg** *Amazon VISA (Zinia)* ausgewählt werden.
+Hier muss nur die Kundenkennung mit dem Benutzernamen fürs Onlinebanking gefüllt und im Dropdown **Zugangsweg** *Amazon VISA (Zinia)* ausgewählt werden.
+Die IBAN muss korrekt gesetzt sein, wodurch sich die BLZ von 50034200 ergeben muss (wird wenn leer, bei der Eingabe der IBAN automatisch gesetzt).
+
 Die Unterkontonummer muss den letzten 4 Ziffern der VISA-Karte entsprechen.
 
 ## Bekannte Probleme / Einschränkungen
