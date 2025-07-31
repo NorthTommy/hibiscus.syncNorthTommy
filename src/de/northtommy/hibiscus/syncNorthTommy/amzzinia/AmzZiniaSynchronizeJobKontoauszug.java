@@ -220,10 +220,10 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 				// within response the next cursor is set; first call without next cursor starts with first record
 				String transactionNextCursor = "";
 				
-				var dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX");
-				dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-				var dateFormatValuta = new SimpleDateFormat("yyyy-MM-dd");
-				dateFormatValuta.setTimeZone(TimeZone.getTimeZone("UTC"));
+				var dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+				//dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+				//var dateFormatValuta = new SimpleDateFormat("yyyy-MM-dd");
+				//dateFormatValuta.setTimeZone(TimeZone.getTimeZone("UTC"));
 				
 				var transactionHasPendingRecords = false;
 				var requestCounterAfterSCA = 0;
@@ -415,7 +415,8 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							if (!sRDateValuta.isEmpty()) {
 								// sometimes no sattlement date is given
 								Date d1 = newUmsatz.getDatum();
-								Date d2 = dateFormatValuta.parse(sRDateValuta);
+								//Date d2 = dateFormatValuta.parse(sRDateValuta);
+								Date d2 = dateFormat.parse(sRDateValuta);
 								if ((d1.getYear() != d2.getYear()) || (d1.getMonth() != d2.getMonth()) || (d1.getDate() != d2.getDate())) {
 									newUmsatz.setValuta(d2);
 								} else {
@@ -436,7 +437,8 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							
 							var duplicate = getDuplicateByCompare(newUmsatz); 
 							if (duplicate != null)
-							{		                		
+							{	
+								log(Level.DEBUG,"duplicate gefunden");
 								duplikateGefunden[0] = true;
 								if (duplicate.hasFlag(Umsatz.FLAG_NOTBOOKED))
 								{
