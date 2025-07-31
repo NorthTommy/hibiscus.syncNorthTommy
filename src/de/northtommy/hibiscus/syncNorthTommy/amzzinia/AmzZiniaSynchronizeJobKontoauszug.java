@@ -249,10 +249,10 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 								}
 							};
 							
-							// we start from beginning with getting transactions
+							// Neubeginn sämtlicher Transaktionsanalyse
 							neueUmsaetze.clear();
-							// restart with salso calc as well
 							calculatedSaldo[0] = konto.getSaldo();
+							// bei duplikaten beenden wir eh
 						}
 						
 						if (monitorComplete < 80) {
@@ -393,6 +393,8 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							var newUmsatz = (Umsatz) Settings.getDBService().createObject(Umsatz.class,null);
 							newUmsatz.setKonto(konto);
 							newUmsatz.setTransactionId(sRId);
+							newUmsatz.setBetrag(sRAmount);
+							
 							if (sRTransactionStatusCode.equals("AUTHORIZED")) {
 								// transaction still not 
 								newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
@@ -409,7 +411,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							} else if (sRTransactionTypeCode.equals("D")) {
 								newUmsatz.setArt("Debit");
 							}
-							newUmsatz.setBetrag(sRAmount);
+							
 							newUmsatz.setDatum(dateFormat.parse(sRDate));
 							var sRDateValuta = sR.optString("settlementDate");	// Sattlement >= date -> Valuta
 							if (!sRDateValuta.isEmpty()) {
@@ -435,7 +437,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							
 							
 							
-							var duplicate = getDuplicateByCompare(newUmsatz); 
+							var duplicate = getDuplicateById(newUmsatz); 
 							if (duplicate != null)
 							{	
 								log(Level.DEBUG,"duplicate gefunden");
