@@ -438,7 +438,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							if (duplicate != null)
 							{	
 								log(Level.DEBUG,"duplicate gefunden");
-								duplicateRxFound[0] = true;
+								//duplicateRxFound[0] = true;
 								if (duplicate.hasFlag(Umsatz.FLAG_NOTBOOKED))
 								{
 									// compare by datum, id, betrag -> daher kein update
@@ -457,6 +457,13 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 									duplicate.store();
 									duplicatesRxNotBooked.add(duplicate);
 									Application.getMessagingFactory().sendMessage(new ObjectChangedMessage(duplicate));
+								} else {
+									// we should stop only on first booked transaction, else we may loose some pending if they are more on a further request.
+									// nevertheless this assumed, that pending transactions are more or less at the beginning of the transactions
+									// the monthly income would be duplicate but we suppress this entry because checking for outgoing transaction
+									if (duplicate.getBetrag() < 0.0) {
+										duplicateRxFound[0] = true;
+									}
 								}
 							}
 							else
