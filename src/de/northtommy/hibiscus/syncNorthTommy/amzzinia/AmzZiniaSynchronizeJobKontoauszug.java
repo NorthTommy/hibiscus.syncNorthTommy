@@ -344,7 +344,6 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 						JSONObject sR = (JSONObject) item;  // cast to correct type
 						
 						try {
-							//log(Level.DEBUG,"trans: " + sR.toString());
 							var sRId = sR.getString("id");
 							var sRCardId = sR.getString("cardId");
 							if (!sRCardId.equals(cardId[0])) {
@@ -384,8 +383,8 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							var sRAmount = sRFirstAmount.getDouble("totalAmount");
 							// assume: alle Umsätze in EUR abgerechnet -> nur fürs logging
 							var sRAmountCurr = sRFirstAmount.getString("currency");
-							log(Level.TRACE, "TransId: " + sRId + "\n   date: " + sRDate + "\n   descr: " + sRDescr[0] + "\n   Amount: " + sRAmount + sRAmountCurr +
-									"\n   TypeCode: " + sRTransactionTypeCode + "\n   StatusCode: " + sRTransactionStatusCode);
+							//log(Level.TRACE, "TransId: " + sRId + "\n   date: " + sRDate + "\n   descr: " + sRDescr[0] + "\n   Amount: " + sRAmount + sRAmountCurr +
+							//		"\n   TypeCode: " + sRTransactionTypeCode + "\n   StatusCode: " + sRTransactionStatusCode);
 							
 							var newUmsatz = (Umsatz) Settings.getDBService().createObject(Umsatz.class,null);
 							newUmsatz.setKonto(konto);
@@ -475,6 +474,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 						catch (Exception ex)
 						{
 							log(Level.ERROR, "Fehler beim Anlegen vom Umsatz: " + ex.toString());
+							log(Level.DEBUG,"trans: " + sR.toString());
 						}
 
 					}); // forEarch records

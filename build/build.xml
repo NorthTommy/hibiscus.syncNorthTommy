@@ -12,6 +12,10 @@
     <resolver:dependencies>
       <resolver:dependency groupId="org.json" artifactId="json" version="20190722" />
       <resolver:dependency groupId="org.htmlunit" artifactId="htmlunit" version="4.4.0" />
+<!--      <resolver:dependency groupId="org.htmlunit" artifactId="htmlunit-websocket-client" version="4.13.0" />-->
+
+      <resolver:dependency groupId ="org.eclipse.jetty.websocket" artifactId="websocket-client" version="9.4.57.v20241219" />
+    	
 <!--     <resolver:dependency groupId="com.microsoft.playwright" artifactId="playwright" version="1.52.0" />-->
 <!-- Maven-Version ist für Java >17 compiliert, daher nicht nutzbar -->
 <!--      <resolver:dependency groupId="io.github.kihdev.playwright-stealth-4j" artifactId="playwright-stealth-4j" version="1.0.0" />-->
