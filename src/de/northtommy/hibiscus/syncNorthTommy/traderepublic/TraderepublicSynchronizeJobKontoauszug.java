@@ -7,6 +7,8 @@ import org.eclipse.jetty.websocket.client.WebSocketClient;
 import java.io.IOException;
 import java.net.URI;
 import java.util.concurrent.TimeUnit;
+
+import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.annotations.*;
 import java.util.concurrent.CountDownLatch;
@@ -15,6 +17,7 @@ import java.util.concurrent.CountDownLatch;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.TimeZone;
 import java.util.UUID;
 
@@ -28,6 +31,7 @@ import de.northtommy.hibiscus.syncNorthTommy.KeyValue;
 import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJob;
 import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJobKontoauszug;
 import de.northtommy.hibiscus.syncNorthTommy.WebResult;
+import de.northtommy.hibiscus.syncNorthTommy.traderepublic.TraderepublicWebSocket.RxState;
 import de.willuhn.datasource.rmi.DBIterator;
 import de.willuhn.jameica.hbci.Settings;
 import de.willuhn.jameica.hbci.messaging.ObjectChangedMessage;
@@ -50,7 +54,13 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	
 	private static final String TRADEREP_LOGIN_URL = "https://api.traderepublic.com/api/v1/auth/web/login";
 	private static final String TRADEREP_ACCOUNT_URL = "https://api.traderepublic.com/api/v2/auth/account";
+	private static final String TRADEREP_WSS_URL = "wss://api.traderepublic.com/";
+	private static final String TRADEREP_LOGOUT_URL = "https://api.traderepublic.com/api/v1/auth/web/logout";
 	
+	
+	private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	
+	int monitorComplete = 0;
 	
 	@Resource
 	private TraderepublicSynchronizeBackend backend = null;
@@ -61,6 +71,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	@Override
 	public boolean process(Konto konto, boolean fetchSaldo, boolean fetchUmsatz, DBIterator<Umsatz> umsaetze, String user, String passwort) throws Exception
 	{
+		
 		
 		ArrayList<KeyValue<String, String>> headers = new ArrayList<>();
 		
@@ -193,6 +204,14 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 				"tr_external_id=" + tr_external_id[0]
 				)));
 			
+		
+		
+		monitorComplete = 5;
+		monitor.setPercentComplete(monitorComplete);
+		log(Level.INFO, "Login erfolgreich.");
+		
+		
+		log(Level.INFO, "Hole Kontodaten.");
 		response = doRequest(TRADEREP_ACCOUNT_URL, 
 				HttpMethod.GET, headers, "application/json", 
 				null);
@@ -209,13 +228,28 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		
 		
+		log(Level.INFO, "Saldo und Umsätze werden abgerufen...");
 		
 		
+		Date untilDate = null;
+		umsaetze.begin();
+		if (umsaetze.hasNext()) {
+			untilDate = umsaetze.next().getDatum();
+			while (umsaetze.hasNext()) {
+				var u = umsaetze.next();
+				if (u.hasFlag(Umsatz.FLAG_NOTBOOKED)) {
+					untilDate = u.getDatum();
+				}
+			}
+			var gc = GregorianCalendar.getInstance();
+			gc.setTime(untilDate);
+			// to be sure
+			gc.add(GregorianCalendar.DAY_OF_MONTH, -10);
+		}
 		
-		String destUri = "wss://api.traderepublic.com/";
-
+		String destUri = TRADEREP_WSS_URL;
         WebSocketClient client = new WebSocketClient();
-        TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "3.296.0", null /*TODO*/);
+        TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "3.296.0", untilDate);
 
         try {
             client.start();
@@ -253,21 +287,246 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             ));
 
             client.connect(socket, echoUri, request);
-            System.out.println("Connecting to: " + echoUri);
+            log(Level.DEBUG, "WSS Connecting to: " + echoUri);
 
-            socket.awaitClose(10, TimeUnit.SECONDS);
+            long syncStart = System.currentTimeMillis();
+            
+            while (((socket.getRxState() != TraderepublicWebSocket.RxState.FINISHED)) && ((System.currentTimeMillis() - syncStart) < 60000)) {
+            	Thread.sleep(1000);
+            }
+            socket.awaitClose(2, TimeUnit.SECONDS);
+            
+            var e = socket.getErrorException();
+            if ( e != null) {
+            	throw e;
+            }
+            if (socket.getRxState() != RxState.FINISHED) {
+            	throw new ApplicationException("Synchronisation Timeout");
+            }
+            
+            
+            if (fetchSaldo) {
+            	boolean foundAccount = false;
+            	var accountsCash = socket.getAccountsCash();
+            	for (int i=0; i<accountsCash.length(); i++) {
+            		JSONObject account = accountsCash.getJSONObject(i);
+            		var accountNo = account.getString("accountNumber");
+            		if (accountNo.endsWith(konto.getKontonummer())) {
+            			log(Level.DEBUG, "found cash for konto");
+            			konto.setSaldo(account.getDouble("amount"));
+            			konto.store();
+    					Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
+    					foundAccount = true;
+    					break;
+            		}
+            	}
+            	var accountsAvailableCash = socket.getAccountsAvailableCash();
+            	for (int i=0; i<accountsAvailableCash.length(); i++) {
+            		JSONObject account = accountsAvailableCash.getJSONObject(i);
+            		var accountNo = account.getString("accountNumber");
+            		if (accountNo.endsWith(konto.getKontonummer())) {
+            			log(Level.DEBUG, "found available cash for konto");
+            			konto.setSaldoAvailable(account.getDouble("amount"));
+            			konto.store();
+    					Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
+    					foundAccount = true;
+    					break;
+            		}
+            	}
+            	if (foundAccount) {
+            		log(Level.INFO, "Saldo abrufen erfolgreich.");
+            	} else {
+            		throw new ApplicationException("Keine Saldo-Information zu der Kontonummer gefunden.");
+            	}
+            }
+            	
+            if (fetchUmsatz) {
+            	
+            	ArrayList<TraderepublicWebSocket.Transaction> transactions = socket.getAccountTransactions();
+            	var neueUmsaetze = new ArrayList<Umsatz>();
+            	double calculatedSaldo = konto.getSaldo();
+            	ArrayList<Umsatz> duplicatesRxNotBooked = new ArrayList<Umsatz>();
+				boolean duplicateRxFound = false;
+            	
+            	for (int i=0; i < transactions.size(); i++) {
+            		// analyze -> newUmsatz
+            		var transaction = transactions.get(i).transaction;
+            		var transactionDetail = transactions.get(i).details;
+            		try {
+            			var accountNo = transaction.optString("cashAccountNumber"); 
+            			if ((accountNo == null) || (accountNo.isBlank())) {
+            				// nur ein Konto vorhanden - alle Umsätze gehören zu dem Konto
+            			} else if (! accountNo.endsWith(konto.getKontonummer())) {
+            				log(Level.DEBUG, "Skip transaction - kto number not equal");
+            				break;
+            			}
+            			
+            			var newUmsatz = (Umsatz) Settings.getDBService().createObject(Umsatz.class,null);
+						newUmsatz.setKonto(konto);
+						newUmsatz.setTransactionId(transaction.getString("id"));
+						
+						newUmsatz.setBetrag(transaction.getJSONObject("amount").getDouble("value"));
+            			
+						var status = transaction.getString("status");
+		            	if ( status.compareToIgnoreCase("CANCELED") == 0) {
+		            		// intentionally no saldo setting
+		            	} else if ( status.compareToIgnoreCase("EXECUTED") == 0) {
+		            		newUmsatz.setSaldo(calculatedSaldo);
+							calculatedSaldo -= newUmsatz.getBetrag();
+		            	} else {
+							// transaction still not 
+							newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
+							// excluded from saldo setting
+							log(Level.INFO, "Bitte einmal im Logfile nach `\"status\":\"` (!= EXECUTED) suchen und dem Eintrag (amount und title kann geschwärzt werden) dem Entwickler zusenden - es scheint weitere Umsatz-Stati zu geben, die bisher nicht bekannt sind. Danke");
+						}
 
-        } catch (Throwable t) {
-            t.printStackTrace();
+		            	var evT = transaction.optString("eventType");
+		            	if ((evT.compareToIgnoreCase("card_successful_transaction") == 0) ||
+	            			(evT.compareToIgnoreCase("OUTGOING_TRANSFER") == 0) ||
+	            			(evT.compareToIgnoreCase("OUTGOING_TRANSFER_DELEGATION") == 0) ||
+	            			(evT.compareToIgnoreCase("PAYMENT_OUTBOUND") == 0) ||
+	            			(evT.compareToIgnoreCase("card_order_billed") == 0) ||
+	            			(evT.compareToIgnoreCase("card_successful_atm_withdrawal") == 0) )
+		            			{
+		            		newUmsatz.setArt("Kartenumsatz");
+		            	}
+		            	else if ((evT.compareToIgnoreCase("card_failed_transaction") == 0) )
+			            		{
+			            		newUmsatz.setArt("Kartenumsatz Fehlgeschlagen/Storno");
+		            	} 
+		            	else if (evT.compareToIgnoreCase("card_successful_verification") == 0) {
+		            		newUmsatz.setArt("Kartenverifikation");
+		            	} 
+		            	else if ((evT.compareToIgnoreCase("trading_trade_executed") == 0) ||
+		            			(evT.compareToIgnoreCase("ORDER_EXECUTED") == 0) ||
+		            			(evT.compareToIgnoreCase("SAVINGS_PLAN_EXECUTED") == 0) ||
+		            			(evT.compareToIgnoreCase("SAVINGS_PLAN_INVOICE_CREATED") == 0) ||
+		            			(evT.compareToIgnoreCase("trading_savingsplan_executed") == 0) ||
+		            			(evT.compareToIgnoreCase("trading_trade_executed") == 0) ||
+		            			(evT.compareToIgnoreCase("benefits_spare_change_execution") == 0) ||
+		            			(evT.compareToIgnoreCase("TRADE_INVOICE") == 0) ||
+		            			(evT.compareToIgnoreCase("TRADE_CORRECTED") == 0) ||
+		            			(evT.compareToIgnoreCase("timeline_legacy_migrated_events") == 0) )
+		            			{
+		            		newUmsatz.setArt("Trading");
+		            	} 
+		            	else if (evT.compareToIgnoreCase("ssp_corporate_action_invoice_cash") == 0) {
+		            		newUmsatz.setArt("Dividendeneingang");
+		            	} 
+		            	else if ( (evT.compareToIgnoreCase("INCOMING_TRANSFER_DELEGATION") == 0) ||  
+		            			(evT.compareToIgnoreCase("INCOMING_TRANSFER") == 0) ||
+		            			(evT.compareToIgnoreCase("ACCOUNT_TRANSFER_INCOMING") == 0) ) {
+		            		newUmsatz.setArt("Zahlungseingang");
+		            	} 
+		            	else if ( (evT.compareToIgnoreCase("ACQUISITION_TRADE_PERK") == 0) ||  
+		            			(evT.compareToIgnoreCase("benefits_saveback_execution") == 0) ) {
+		            		newUmsatz.setArt("Saveback Trading");
+		            	} 
+		            	else if ((evT.compareToIgnoreCase("INTEREST_PAYOUT") == 0) || 
+		            			(evT.compareToIgnoreCase("INTEREST_PAYOUT_CREATED") == 0) ) {
+		            		newUmsatz.setArt("Zinzzahlung ");
+		            	}
+	            	
+		            	else if (!evT.isBlank()) {
+		            		newUmsatz.setArt("Sonstiges (evenType: " + evT +")");
+		            	}
+		            	
+		            	newUmsatz.setDatum(dateFormat.parse(transaction.getString("timestamp")));
+		            	// wir haben keine Unterscheidung zwischen Valuta und Datum
+		            	newUmsatz.setValuta(newUmsatz.getDatum());
+		            	
+		            	String vz = transaction.getString("title"); 
+		            	String vz2 = transaction.optString("subtitle");
+            			if (!vz2.isBlank()) {
+            				vz = vz + " (" +  vz2 + ")";
+            			}
+		            	newUmsatz.setZweck(vz);
+		            	
+		            	//newUmsatz.setCustomerRef(sR.optJSONObject("merchantDetails").optString("id"));
+		            	
+		            	var duplicate = getDuplicateById(newUmsatz); 
+						if (duplicate != null)
+						{	
+							log(Level.DEBUG,"duplicate gefunden");
+							duplicateRxFound = true;
+							if (duplicate.hasFlag(Umsatz.FLAG_NOTBOOKED))
+							{
+								// compare by datum, id, betrag -> daher kein update
+								duplicate.setFlags(newUmsatz.getFlags());
+								duplicate.setSaldo(newUmsatz.getSaldo());
+								duplicate.setWeitereVerwendungszwecke(newUmsatz.getWeitereVerwendungszwecke());
+		
+								duplicate.setGegenkontoBLZ(newUmsatz.getGegenkontoBLZ());
+								duplicate.setGegenkontoName(newUmsatz.getGegenkontoName());
+								duplicate.setGegenkontoNummer(newUmsatz.getGegenkontoNummer());
+								duplicate.setValuta(newUmsatz.getValuta());
+								duplicate.setArt(newUmsatz.getArt());
+								duplicate.setCreditorId(newUmsatz.getCreditorId());
+								duplicate.setMandateId(newUmsatz.getMandateId());
+								duplicate.setCustomerRef(newUmsatz.getCustomerRef());
+								duplicate.store();
+								duplicatesRxNotBooked.add(duplicate);
+								Application.getMessagingFactory().sendMessage(new ObjectChangedMessage(duplicate));
+							}
+						}
+						else
+						{
+							neueUmsaetze.add(newUmsatz);
+						}
+	            	
+            		}
+            		catch (Exception ex)
+					{
+						log(Level.ERROR, "Fehler beim Anlegen vom Umsatz: " + ex.toString());
+						log(Level.DEBUG,"trans: " + transaction.toString());
+					}
+            	} // for each transaction
+            	
+            	
+            	monitorComplete = 90;
+				monitor.setPercentComplete(monitorComplete);
+				log(Level.INFO, "Kontoauszug erfolgreich. Importiere Daten ...");
+
+				reverseImport(neueUmsaetze);
+				
+				
+				monitorComplete = 95;
+				monitor.setPercentComplete(monitorComplete);
+				log(Level.INFO, "Import erfolgreich. Pr\u00FCfe Reservierungen ...");
+				
+				umsaetze.begin();
+				while (umsaetze.hasNext())
+				{
+					Umsatz umsatz = umsaetze.next();
+					if (umsatz.hasFlag(Umsatz.FLAG_NOTBOOKED))
+					{
+						if (!duplicatesRxNotBooked.contains(umsatz))
+						{
+							var id = umsatz.getID();
+							umsatz.delete();
+							Application.getMessagingFactory().sendMessage(new ObjectDeletedMessage(umsatz, id));
+						}
+					}
+				}
+				
+            } // if fetchUmsatz
+
         } finally {
             try {
                 client.stop();
             } catch (Exception e) {
                 e.printStackTrace();
             }
+            
+            // Logout
+ 			try 
+ 			{
+ 				response = doRequest(TRADEREP_LOGOUT_URL, 
+ 						HttpMethod.POST, headers, "application/json", 
+ 						null);
+ 			}
+ 			catch (Exception e) {}
         }
-		
-			
 		return true;
 	}
 
@@ -279,6 +538,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	
 	@Override
 	public void incrementPercentComplete(int arg0) {
-		monitor.setPercentComplete(arg0);
+		if (monitorComplete < 80) {
+			monitorComplete +=arg0;
+		};
+		monitor.setPercentComplete(monitorComplete);
 	}
 }
