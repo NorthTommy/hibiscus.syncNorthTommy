@@ -6,6 +6,7 @@
  
    <plugins name="hibiscus.syncNorthTommy" certificate="https://northtommy.linkpc.net/hibiscus/hibkey.cer">
      <plugin url="https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.1.1" />
+     <plugin url="https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.2.0" />
    </plugins>
 
  

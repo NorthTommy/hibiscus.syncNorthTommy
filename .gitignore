@@ -4,3 +4,4 @@
 /build/BUILD
 /releases/*
 /lib/*.jar
+/bin/
