@@ -251,7 +251,7 @@ public class TraderepublicWebSocket {
 									syncJob.logging(Level.DEBUG, "WebSocket request further transactions: " + s);
 	    							this.session.getRemote().sendString(s);
 	    						} else {
-	    							syncJob.logging(Level.INFO, "Umsaetze abgerufen.");
+	    							syncJob.logging(Level.INFO, "Ums\u00E4tze abgerufen.");
 	    							this.rxState = RxState.WAIT_REMAINING_SUBS;
 	    						}
 	    						// we only expect A in this case

@@ -11,3 +11,6 @@ Version		Date			Change
 0.1.1		2025-07-31		Fix für doppelte Buchungen bei erneutem Synchronisieren
 							Handling von "nur autorisierten" Einträgen, die noch keine Buchungen sind
 0.2.0		2025-08-05		Added TradeRepublic Account sync
+0.2.1		2026-01-18		Log-Ausgaben mit Umlauten korrigiert
+							Added TradeRepublic debug messages
+							Zertifikatserneuerung

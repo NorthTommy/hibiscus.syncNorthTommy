@@ -3,15 +3,15 @@
 <plugin xmlns="http://www.willuhn.de/schema/jameica-plugin"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.willuhn.de/schema/jameica-plugin http://www.willuhn.de/schema/jameica-plugin-1.2.xsd"
-        name="hibiscus.syncNorthTommy" version="0.2.0" class="de.northtommy.hibiscus.syncNorthTommy.Plugin">
+        name="hibiscus.syncNorthTommy" version="0.2.1" class="de.northtommy.hibiscus.syncNorthTommy.Plugin">
 
   <description>Hibiscus Plugin zur Kontensynchronisation für Amazon VISA (Zinia Bank), TradeRepublic</description>
-  <url>https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.2.0/hibiscus.syncNorthTommy.zip</url>
+  <url>https://northtommy.linkpc.net/hibiscus/hibiscus.syncNorthTommy/0.2.1/hibiscus.syncNorthTommy.zip</url>
   <homepage>https://github.com/NorthTommy/hibiscus.syncNorthTommy</homepage>
   <license>GPL - http://www.gnu.org/copyleft/gpl.html</license>
 
-  <requires jameica="2.6.0+">
-    <import plugin="hibiscus" version="2.6.0+" />
+  <requires jameica="2.10.0+">
+    <import plugin="hibiscus" version="2.10.0+" />
   </requires>
 
 

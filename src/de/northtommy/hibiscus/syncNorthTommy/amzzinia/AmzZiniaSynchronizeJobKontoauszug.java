@@ -179,7 +179,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 				}
 			}
 			if (cardId[0].isBlank()) {
-				log(Level.WARN, "keine passende Karte mit den Endziffernt laut Unterkonto (siehe Kontodaten) gefunden.");
+				log(Level.WARN, "Keine passende Karte mit den Endziffernt laut Unterkonto (siehe Kontodaten) gefunden.");
 			}
 					
 
@@ -284,7 +284,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 						
 						scaDone[0] =  true;
 						
-						log(Level.INFO, "Benoetige zweiten Faktor fuer weitere Umsaetze...");
+						log(Level.INFO, "Ben\u00F6tige zweiten Faktor f\u00FCr weitere Ums\u00E4tze...");
 						monitorComplete = 25;
 						monitor.setPercentComplete(monitorComplete);
 						
@@ -294,15 +294,15 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 						response = doRequest(url, HttpMethod.GET, headers, "application/json", null);
 						if (response.getHttpStatus() != 403) {
 							log(Level.DEBUG, "Request 'includeAllRecords' failed - Response: " + response.getContent());
-							throw new ApplicationException("2FA-Abruf fuer 'alle Transaktionen' fehlgeschlagen.");
+							throw new ApplicationException("2FA-Abruf f\u00FCr 'alle Transaktionen' fehlgeschlagen.");
 						}
 						json = response.getJSONObject();
 						var otpId = json.getString("otpId");
 						var progressId = json.getString("progressId");
 						
-						var requestText = "Gib den Bestaetigungscode ein, den du per SMS erhalten hast (fuer 'Alle Transaktionen abrufen')";	// TBD evtl. versch. Wege !?
+						var requestText = "Gib den Best\u00E4tigungscode ein, den du per SMS erhalten hast (f\u00FCr 'Alle Transaktionen abrufen')";	// TBD evtl. versch. Wege !?
 
-						var sca = Application.getCallback().askUser(requestText, "Bestaetigungscode:");
+						var sca = Application.getCallback().askUser(requestText, "Best\u00E4tigungscode:");
 						if (sca == null || sca.isBlank())
 						{
 							log(Level.WARN, "TAN-Eingabe 'Alle Transaktionen abrufen' abgebrochen");
@@ -320,8 +320,8 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							json = response.getJSONObject();
 							if ((response.getHttpStatus() != 201) || (json == null) || (!json.optString("nextChallengeType").equals("None"))) {
 								log(Level.DEBUG, "'All records' verification failed - Response: " + response.getContent());
-								log(Level.ERROR, "Abfrage abgebrochen - Starte Umsatzabfrage neu nach Eingabe zweiter Faktor");
-								throw new ApplicationException("2FA-Verfikation fuer 'alle Transaktionen' fehlgeschlagen.");
+								log(Level.ERROR, "Abfrage abgebrochen - Neue Umsatzabfrage nach Eingabe des zweiten Faktor fehlgeschlagen");
+								throw new ApplicationException("2FA-Verfikation f\u00FCr 'alle Transaktionen' fehlgeschlagen.");
 							}
 		
 							// recall transactions request with current cursor (should return without pendingRecords)
@@ -333,7 +333,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 						log(Level.DEBUG, "2nd time pending records resceived - abort here for a new manual sync start");
 						
 						log(Level.ERROR, "Abfrage abgebrochen - Starte Umsatzabfrage neu");
-						throw new ApplicationException("Synchronisationsfehler fuer 'alle Transaktionen'.");
+						throw new ApplicationException("Synchronisationsfehler f\u00FCr 'alle Transaktionen'.");
 					}
 					
 					var records = json.getJSONArray("elements");
@@ -348,7 +348,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							var sRCardId = sR.getString("cardId");
 							if (!sRCardId.equals(cardId[0])) {
 								// skip this entry by return lamda-function
-								log(Level.TRACE,"Ueberspringe kartenfremde Transaktion " + sRCardId + " vs. " + cardId[0]);
+								log(Level.DEBUG,"skip transaktion for other card ID" + sRCardId + " vs. " + cardId[0]);
 								return;
 							}
 							
@@ -360,7 +360,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 							String sRTransactionTypeCode = sR.optString("transactionTypeCode");
 							if (sRTransactionTypeCode.isEmpty()) {
 								// skip this entry by return lamda-function
-								log(Level.TRACE,"Ueberspringe reine Amazon-Punkte-Transaktion " + sR.toString());
+								log(Level.DEBUG,"skip Amazon-point-only-transaktion " + sR.toString());
 								return;
 							}
 							// Description prio:

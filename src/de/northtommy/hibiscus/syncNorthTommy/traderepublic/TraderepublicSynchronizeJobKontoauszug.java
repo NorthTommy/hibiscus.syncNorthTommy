@@ -228,7 +228,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		
 		
-		log(Level.INFO, "Saldo und Umsätze werden abgerufen...");
+		log(Level.INFO, "Saldo und Ums\u00E4tze werden abgerufen...");
 		
 		
 		Date untilDate = null;
@@ -312,12 +312,14 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             		JSONObject account = accountsCash.getJSONObject(i);
             		var accountNo = account.getString("accountNumber");
             		if (accountNo.endsWith(konto.getKontonummer())) {
-            			log(Level.DEBUG, "found cash for konto");
+            			log(Level.INFO, "Saldo f\u00FCr aktuelle Kontonummer gefunden");
             			konto.setSaldo(account.getDouble("amount"));
             			konto.store();
     					Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
     					foundAccount = true;
     					break;
+            		} else {
+            			log(Level.INFO, "Saldo f\u00FCr weitere Kontonummer gefunden (wird ignoriert): " + accountNo);
             		}
             	}
             	var accountsAvailableCash = socket.getAccountsAvailableCash();
@@ -325,12 +327,14 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             		JSONObject account = accountsAvailableCash.getJSONObject(i);
             		var accountNo = account.getString("accountNumber");
             		if (accountNo.endsWith(konto.getKontonummer())) {
-            			log(Level.DEBUG, "found available cash for konto");
+            			log(Level.INFO, "Verf\u00FCgbares Saldo f\u00FCr aktuelle Kontonummer gefunden");
             			konto.setSaldoAvailable(account.getDouble("amount"));
             			konto.store();
     					Application.getMessagingFactory().sendMessage(new SaldoMessage(konto));
     					foundAccount = true;
     					break;
+            		} else {
+            			log(Level.INFO, "Verf\u00FCgbares Saldo f\u00FCr weitere Kontonummer gefunden (wird ignoriert): " + accountNo);
             		}
             	}
             	if (foundAccount) {
@@ -356,9 +360,12 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             			var accountNo = transaction.optString("cashAccountNumber"); 
             			if ((accountNo == null) || (accountNo.isBlank())) {
             				// nur ein Konto vorhanden - alle Umsätze gehören zu dem Konto
+            				log(Level.DEBUG, "Transaktion hat keine Kontonummer - Annahme nur ein Konto -> g\u00FCltig");
             			} else if (! accountNo.endsWith(konto.getKontonummer())) {
-            				log(Level.DEBUG, "Skip transaction - kto number not equal");
+            				log(Level.DEBUG, "Transaktion verwerfen - Kontonummer nicht passend");
             				break;
+            			} else {
+            				log(Level.DEBUG, "Transaktion für aktuelle Kontonummer");
             			}
             			
             			var newUmsatz = (Umsatz) Settings.getDBService().createObject(Umsatz.class,null);
@@ -377,7 +384,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 							// transaction still not 
 							newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
 							// excluded from saldo setting
-							log(Level.INFO, "Bitte einmal im Logfile nach `\"status\":\"` (!= EXECUTED) suchen und dem Eintrag (amount und title kann geschwärzt werden) dem Entwickler zusenden - es scheint weitere Umsatz-Stati zu geben, die bisher nicht bekannt sind. Danke");
+							log(Level.INFO, "Bitte einmal im Logfile nach `\"status\":\"` (!= EXECUTED) suchen und den Eintrag (amount und title kann geschw\u00E4rzt werden) dem Entwickler zusenden - es scheint weitere Umsatz-Stati zu geben, die bisher nicht bekannt sind. Danke");
 						}
 
 		            	var evT = transaction.optString("eventType");
