@@ -17,6 +17,9 @@ Konten müssen von Hand angelegt werden, dafür unter **Konten** auf **Konto man
 Hier muss die Kundenkennung mit dem Benutzernamen fürs Onlinebanking gefüllt werden. Im Dropdown **Zugangsweg** *Amazon VISA (Zinia)* ausgewählen.
 Die IBAN muss korrekt gesetzt sein, wodurch sich die BLZ von 50034200 ergeben muss (wird wenn leer, bei der Eingabe der IBAN automatisch gesetzt).
 
+Tipp: Die Kreditkarten-IBAN findet man auf der Zinia-Web-Page unter dem Menüpunkt: "Finanzierung">"Geld einzahlen:">"Internes Bankkonto".
+Nicht verwechseln mit der IBAN des Referenz-Giro-Kontos oder der IBAN mit der Zinia die Lastschrift-Abbuchung macht !
+
 Die Unterkontonummer muss den letzten 4 Ziffern der VISA-Karte entsprechen.
 
 #### Bekannte Probleme / Einschränkungen
