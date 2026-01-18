@@ -26,7 +26,7 @@ Die Unterkontonummer muss den letzten 4 Ziffern der VISA-Karte entsprechen.
 - Reine Amazon-Punkte-Transaktionen (0,- EUR) werden ignoriert
 - Zwischensaldo jeder Buchung ist nur eine Momentanaufnahme zum Zeitpunkt der Synchonisierung und ergebt keinen Anspruch auf Korrektheit/Aktualisierung wenn nachträglich (Valuta neuer) Umsätze abgerechnet (Autorisierungen) oder gelöscht (Reservierungen) werden. 
 
-###TradeRepublic
+### TradeRepublic
 Hier muss die Kundenkennung mit der verknüpften Telefonnummer im Format +49xxxx (f. Dtl). übereinstimmen. Im Dropdown **Zugangsweg** *Traderepublic* ausgewählen.
 Die IBAN muss korrekt gesetzt sein, wodurch sich die BLZ von 10012345 ergeben muss (wird wenn leer, bei der Eingabe der IBAN automatisch gesetzt).
 Die damit gesetzte Kontonummer ist ebenfalls wichtig, damit der Saldo-Abgleich funktioniert.
