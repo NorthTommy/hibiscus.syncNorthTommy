@@ -32,7 +32,7 @@ Die Unterkontonummer muss den letzten 4 Ziffern der VISA-Karte entsprechen.
 ### TradeRepublic
 Hier muss die Kundenkennung mit der verknüpften Telefonnummer im Format +49xxxx (f. Dtl). übereinstimmen. Im Dropdown **Zugangsweg** *Traderepublic* ausgewählen.
 Die IBAN muss korrekt gesetzt sein, wodurch sich die BLZ von 10012345 ergeben muss (wird wenn leer, bei der Eingabe der IBAN automatisch gesetzt).
-Die damit gesetzte Kontonummer ist ebenfalls wichtig, damit der Saldo-Abgleich funktioniert.
+Die Kontonummer ist ebenfalls wichtig, damit der Saldo-Abgleich funktioniert. Idealerweise ergibt sie sich direkt aus der IBAN. Hinweis: In einigen Fällen ist als Kontonummer die 10-stellige Depotnummer zu nutzen, die sich in den letzten Ziffern von der Verrechnungs-/Girokontonummer unterscheidet. Also mal probieren welche Nummer man hat. Auf der Desktop-Seite kann man unter Profil>Settings>Accounts beide Nummern einsehen. 
 
 Hinweis: Bei dem Support von TradeRepublic soll es NICHT um eine Depotunterstützung gehen. Vielmehr soll das Konto selbst samt allen Transaktionen synchronisiert werden können.
 Dass dabei Depot-Bewegungen auftrauchen ist dem geschuldet, dass das Konto neben üblichen Bewegungen eben auch als Verrechnungskonto für das Depot dient.
