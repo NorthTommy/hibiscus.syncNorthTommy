@@ -4,13 +4,18 @@ package de.northtommy.hibiscus.syncNorthTommy.traderepublic;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Path;
+import java.rmi.RemoteException;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.annotations.*;
+
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 
 
@@ -18,6 +23,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.UUID;
 
@@ -30,8 +37,11 @@ import org.json.JSONObject;
 import de.northtommy.hibiscus.syncNorthTommy.KeyValue;
 import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJob;
 import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJobKontoauszug;
+import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJobKontoauszugLoggerI;
 import de.northtommy.hibiscus.syncNorthTommy.WebResult;
 import de.northtommy.hibiscus.syncNorthTommy.traderepublic.TraderepublicWebSocket.RxState;
+import de.northtommy.hibiscus.syncNorthTommy.PlayWrightRunnerThread;
+
 import de.willuhn.datasource.rmi.DBIterator;
 import de.willuhn.jameica.hbci.Settings;
 import de.willuhn.jameica.hbci.messaging.ObjectChangedMessage;
@@ -45,23 +55,35 @@ import de.willuhn.logging.Level;
 import de.willuhn.logging.Logger;
 import de.willuhn.util.ApplicationException;
 
+import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.Browser.NewContextOptions;
+import com.microsoft.playwright.BrowserType;
+import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.Page.ScreenshotOptions;
+import com.microsoft.playwright.Route.FulfillOptions;
+import com.microsoft.playwright.options.ScreenshotAnimations;
+import com.microsoft.playwright.options.ScreenshotType;
+import io.github.kihdev.playwright.stealth4j.Stealth4j;
+import io.github.kihdev.playwright.stealth4j.Stealth4jConfig;
+
 // Spezifisch, eigentliche Implementierung
 
-public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKontoauszug implements SyncNTSynchronizeJob , TraderepublicSynchronizeJobKontoauszugI
+public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKontoauszug implements SyncNTSynchronizeJob , SyncNTSynchronizeJobKontoauszugLoggerI
 {
 
-	
+	//private static final String TRADEREP_PLAYWRIGTH_HOME = "https://traderepublic.com/";
+	private static final String TRADEREP_PLAYWRIGTH_LOGIN = "https://app.traderepublic.com/login";
 	
 	private static final String TRADEREP_LOGIN_URL = "https://api.traderepublic.com/api/v1/auth/web/login";
 	private static final String TRADEREP_ACCOUNT_URL = "https://api.traderepublic.com/api/v2/auth/account";
 	private static final String TRADEREP_WSS_URL = "wss://api.traderepublic.com/";
 	private static final String TRADEREP_LOGOUT_URL = "https://api.traderepublic.com/api/v1/auth/web/logout";
 	
+	private PlayWrightRunnerThread pwrt = null;
 	
 	private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 	
-	int monitorComplete = 0;
-	
+
 	@Resource
 	private TraderepublicSynchronizeBackend backend = null;
 
@@ -71,9 +93,24 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	@Override
 	public boolean process(Konto konto, boolean fetchSaldo, boolean fetchUmsatz, DBIterator<Umsatz> umsaetze, String user, String passwort) throws Exception
 	{
+		boolean headlessBrowser = "true".equals(konto.getMeta(TraderepublicSynchronizeBackend.META_NOTHEADLESS, "true"));
+		String firefoxPath = konto.getMeta(TraderepublicSynchronizeBackend.META_FIREFOXPATH,  null);
 		
-		
+		this.pwrt = new PlayWrightRunnerThread(this, firefoxPath, headlessBrowser, webClient, TRADEREP_PLAYWRIGTH_LOGIN);
+
 		ArrayList<KeyValue<String, String>> headers = new ArrayList<>();
+		
+		log(Level.INFO, "Warte auf AWS WAF token vom Browser");
+		this.pwrt.start();
+		// waiting playwright tread got a first token
+		int pwrtTimeout = 250;
+		while (pwrt.isAlive() && (pwrt.awsWafToken == null) && (pwrtTimeout-- > 0)) {
+			Thread.sleep(100);
+		}
+		if (pwrt.awsWafToken == null) {
+			log(Level.DEBUG, "got no AWS WAF token in time");
+			throw new ApplicationException("Zeitueberschreitung AWS WAF token");
+		}
 		
 		// add default headers for any communication
 		headers.add(new KeyValue<String, String>("Accept", "*/*"));
@@ -90,8 +127,12 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		//headers.add(new KeyValue<String, String>("TE", "trailers"));
 		headers.add(new KeyValue<String, String>("X-TR-Platform", "web"));
 		//headers.add(new KeyValue<String, String>("X-TR-App-Version", "3.296.0"));
-		
-		
+		String awsWafToken = pwrt.awsWafToken;
+		headers.add(new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
+		var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
+				"aws-waf-token=" + awsWafToken
+				));
+		headers.add(cookieHeaderEntry);
 		  
 		// Perform Pre Login somehow needed for login request, although returned data seems to be constant regarding those data used in login request
 		
@@ -99,15 +140,35 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 				"{\"phoneNumber\":\"" + user + "\",\"pin\":\"" + passwort + "\"}");
 		
 		if (response.getHttpStatus() != 200) {
-			log(Level.DEBUG, "Response: " + response.getContent());
-			throw new ApplicationException("Login Step 1 fehlgeschlagen");
+			// try with new AWS WAF token
+			Thread.sleep(100);
+
+			// duplicate code above
+			awsWafToken = pwrt.awsWafToken;
+			replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
+			cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
+					"aws-waf-token=" + awsWafToken
+					));
+			replaceArrayListEntry(headers, cookieHeaderEntry);
+			// retry login call
+			response = doRequest(TRADEREP_LOGIN_URL, HttpMethod.POST, headers, "application/json", 
+					"{\"phoneNumber\":\"" + user + "\",\"pin\":\"" + passwort + "\"}");
+		
+			if (response.getHttpStatus() != 200) {
+				log(Level.DEBUG, "login Step 1 response: " + response.getContent());
+				throw new ApplicationException("Login Step 1 fehlgeschlagen");
+			}
 		}
 		
 		var json = response.getJSONObject();
-
+		log(Level.DEBUG, "Login step 1 response: " + json);
+		// processId needed for URL for sending SMS-TAN
+		String processId = json.getString("processId");
+		// sessionId needed for cookie when sending SMS-TAN
 		String sessId[] = {""};
+		String tr_device[] = {""};
 		response.getResponseHeader().forEach(nvp -> {
-			log(Level.DEBUG, "login header: " + nvp.getName() + ": " + nvp.getValue());
+			log(Level.DEBUG, "Login Step 1 header: " + nvp.getName() + ": " + nvp.getValue());
 			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
 				var val = nvp.getValue();
 				String[] vals = val.split(";");
@@ -115,19 +176,20 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 					if (v.startsWith("JSESSIONID")) {
 						sessId[0] = v.substring(val.indexOf("JSESSIONID=") + 11);
 					}
+					if (v.startsWith("tr_device")) {
+						tr_device[0] = v.substring(val.indexOf("tr_device=") + 10);
+					}
 				}
 			}
 		});
-		
-		log(Level.DEBUG, "JSESSIONID: " + sessId[0]);
-		log(Level.DEBUG, "login str: " + json);
-		
-		
+		log(Level.DEBUG, "Login Step 1 JSESSIONID: " + sessId[0]);
+		log(Level.DEBUG, "Login Step 1 tr_device: " + tr_device[0]);
+		log(Level.DEBUG, "Login Step 1 processId: " + processId);
 		
 		
 		
 		var requestText = "Gib den Code ein, den du per Traderepublic App erhalten hast";
-		//
+		
 		var sca = Application.getCallback().askUser(requestText, "Code:");
 		if (sca == null || sca.isBlank())
 		{
@@ -135,30 +197,55 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			return true;
 		}
 		
-		headers.add(new KeyValue<String, String>("Cookie", String.join("; ",
-				"JSESSIONID=" + sessId[0]
-				)));
+		
+		awsWafToken = pwrt.awsWafToken;
+		replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
+		cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
+				"JSESSIONID=" + sessId[0],
+				"tr_device=" + tr_device[0],
+				"aws-waf-token=" + awsWafToken
+				));
+		replaceArrayListEntry(headers, cookieHeaderEntry);
+		
 			
-		response = doRequest(TRADEREP_LOGIN_URL + "/"+ json.getString("processId") + "/" + sca, 
+		response = doRequest(TRADEREP_LOGIN_URL + "/"+ processId + "/" + sca, 
 				HttpMethod.POST, headers, "application/json", 
 				null);
 		
 		if (response.getHttpStatus() != 200) {
-			log(Level.DEBUG, "Response: " + response.getContent());
-			throw new ApplicationException("Login Step 2 fehlgeschlagen");
+			// try with new AWS WAF token
+			Thread.sleep(100);
+
+			// duplicate code above
+			awsWafToken = pwrt.awsWafToken;
+			replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
+			cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
+					"JSESSIONID=" + sessId[0],
+					"aws-waf-token=" + awsWafToken
+					));
+			replaceArrayListEntry(headers, cookieHeaderEntry);
+			// retry TAN call
+			response = doRequest(TRADEREP_LOGIN_URL + "/"+ processId + "/" + sca, 
+					HttpMethod.POST, headers, "application/json", 
+					null);
+			if (response.getHttpStatus() != 200) {
+				log(Level.DEBUG, "Login Step 2 Response: " + response.getContent());
+				throw new ApplicationException("Login Step 2 fehlgeschlagen");
+			}
 		}
-		log(Level.DEBUG, "Login2 Response: " + response.getContent());
+		log(Level.DEBUG, "Login Step 2 Response: " + response.getContent());
 		
 		
+		// with TAN-call we got further data
 		
-		
+		// seddId is reused and updated
 		String tr_session[] = {""};
 		String tr_claims[] = {""};
-		String tr_device[] = {""};
 		String tr_external_id[] = {""};
+		String tr_refresh[] = {""};
 		
 		response.getResponseHeader().forEach(nvp -> {
-			log(Level.DEBUG, "login header: " + nvp.getName() + ": " + nvp.getValue());
+			log(Level.DEBUG, "Login Step 2 header: " + nvp.getName() + ": " + nvp.getValue());
 			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
 				var val = nvp.getValue();
 				String[] vals = val.split(";");
@@ -172,8 +259,8 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 					if (v.startsWith("tr_claims")) {
 						tr_claims[0] = v.substring(val.indexOf("tr_claims=") + 10);
 					}
-					if (v.startsWith("tr_device")) {
-						tr_device[0] = v.substring(val.indexOf("tr_device=") + 10);
+					if (v.startsWith("tr_refresh")) {
+						tr_refresh[0] = v.substring(val.indexOf("tr_refresh=") + 11);
 					}
 					if (v.startsWith("tr_external_id")) {
 						tr_external_id[0] = v.substring(val.indexOf("tr_external_id=") + 15);
@@ -182,32 +269,28 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			}
 		});
 		
-		log(Level.DEBUG, "JSESSIONID: " + sessId[0]);
-		log(Level.DEBUG, "tr_session: " + tr_session[0]);
-		log(Level.DEBUG, "tr_claims: " + tr_claims[0]);
-		log(Level.DEBUG, "tr_device: " + tr_device[0]);
-		log(Level.DEBUG, "tr_external_id: " + tr_external_id[0]);
+		log(Level.DEBUG, "Login step 2 new JSESSIONID: " + sessId[0]);
+		log(Level.DEBUG, "Login step 2 tr_session: " + tr_session[0]);
+		log(Level.DEBUG, "Login step 2 tr_claims: " + tr_claims[0]);
+		log(Level.DEBUG, "Login step 2 tr_device: " + tr_device[0]);
+		log(Level.DEBUG, "Login step 2 tr_external_id: " + tr_external_id[0]);
 		
+		awsWafToken = pwrt.awsWafToken;
+		replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
 		
-		
-		for (int i = 0; i < headers.size(); i++ ) {
-			if ( headers.get(i).getKey().compareToIgnoreCase("Cookie")== 0 ) {
-				headers.remove(headers.get(i));
-				break;
-			}
-		};
-		headers.add(new KeyValue<String, String>("Cookie", String.join("; ",
+		cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
 				"JSESSIONID=" + sessId[0],
 				"tr_session=" + tr_session[0],
 				"tr_claims=" + tr_claims[0],
 				"tr_device=" + tr_device[0],
-				"tr_external_id=" + tr_external_id[0]
-				)));
-			
+				"tr_refresh=" + tr_refresh[0],
+				"tr_external_id=" + tr_external_id[0],
+				"aws-waf-token=" + awsWafToken
+				));
+		replaceArrayListEntry(headers, cookieHeaderEntry);
 		
 		
-		monitorComplete = 5;
-		monitor.setPercentComplete(monitorComplete);
+		updatePercentComplete(5);
 		log(Level.INFO, "Login erfolgreich.");
 		
 		
@@ -217,19 +300,41 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 				null);
 		
 		if (response.getHttpStatus() != 200) {
-			log(Level.DEBUG, "Response: " + response.getContent());
-			throw new ApplicationException("Get Account info fehlgeschlagen");
+			// try with new AWS WAF token
+			Thread.sleep(100);
+
+			// duplicate code above
+			awsWafToken = pwrt.awsWafToken;
+			replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
+			cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
+					"JSESSIONID=" + sessId[0],
+					"tr_session=" + tr_session[0],
+					"tr_claims=" + tr_claims[0],
+					"tr_device=" + tr_device[0],
+					"tr_refresh=" + tr_refresh[0],
+					"tr_external_id=" + tr_external_id[0],
+			
+					"aws-waf-token=" + awsWafToken
+					));
+			replaceArrayListEntry(headers, cookieHeaderEntry);
+			
+			// retry account call
+			response = doRequest(TRADEREP_ACCOUNT_URL, 
+					HttpMethod.GET, headers, "application/json", 
+					null);
+			
+			if (response.getHttpStatus() != 200) {
+				log(Level.DEBUG, "Response: " + response.getContent());
+				throw new ApplicationException("Holen der Kontodaten fehlgeschlagen");
+			}
 		}
 		
 		json = response.getJSONObject();
-		
 		log(Level.DEBUG, "Account Response: " + json);
-		
-		
+
 		
 		
 		log(Level.INFO, "Saldo und Ums\u00E4tze werden abgerufen...");
-		
 		
 		Date untilDate = null;
 		umsaetze.begin();
@@ -249,7 +354,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		String destUri = TRADEREP_WSS_URL;
         WebSocketClient client = new WebSocketClient();
-        TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "3.296.0", untilDate);
+        TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "14.23.3", untilDate);
 
         try {
             client.start();
@@ -274,6 +379,8 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             request.setHeader("Upgrade", "websocket");
             request.setHeader("Host", "api.traderepublic.com");
             
+            request.setHeader("x-aws-waf-token", awsWafToken);
+            
             // Add cookies as header
             request.setHeader("Cookie", String.join("; ",
                 "i18n_redirected=en",
@@ -282,7 +389,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
                 "tr_session=" + tr_session[0],
                 "tr_claims=" + tr_claims[0],
                 "tr_device" + tr_device[0],
-                "tr_external_id" + tr_external_id[0]
+                "tr_refresh=" + tr_refresh[0],
+                "tr_external_id" + tr_external_id[0],
+                "aws-waf-token=" + awsWafToken
                 // ... other cookies
             ));
 
@@ -490,15 +599,12 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             	} // for each transaction
             	
             	
-            	monitorComplete = 90;
-				monitor.setPercentComplete(monitorComplete);
+            	updatePercentComplete(90);
 				log(Level.INFO, "Kontoauszug erfolgreich. Importiere Daten ...");
 
 				reverseImport(neueUmsaetze);
 				
-				
-				monitorComplete = 95;
-				monitor.setPercentComplete(monitorComplete);
+				updatePercentComplete(95);
 				log(Level.INFO, "Import erfolgreich. Pr\u00FCfe Reservierungen ...");
 				
 				umsaetze.begin();
@@ -533,21 +639,17 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
  						null);
  			}
  			catch (Exception e) {}
+ 			
+ 			try {
+ 				if (pwrt != null) {
+ 					log(Level.DEBUG, "stop PlayWrightRunnerThread");
+ 					pwrt.stopRunning();
+ 					log(Level.DEBUG, "join PlayWrightRunnerThread waiting for finishing browser");
+ 					pwrt.join(40000 /* more than defailt for Playwright.waitForResponse() */);
+ 					log(Level.DEBUG, "stopped PlayWrightRunnerThread");
+ 				}
+ 			} catch (Exception e) {}
         }
 		return true;
-	}
-
-	@Override
-	public void logging(Level level, String msg) {
-		log(level, msg);
-		//System.out.println("["+level+"] " + msg);
-	}
-	
-	@Override
-	public void incrementPercentComplete(int arg0) {
-		if (monitorComplete < 80) {
-			monitorComplete +=arg0;
-		};
-		monitor.setPercentComplete(monitorComplete);
 	}
 }

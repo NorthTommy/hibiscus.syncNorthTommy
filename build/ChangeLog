@@ -14,3 +14,4 @@ Version		Date			Change
 0.2.1		2026-01-18		Log-Ausgaben mit Umlauten korrigiert
 							Added TradeRepublic debug messages
 							Zertifikatserneuerung
+0.3.0		2026-03-31		Fixed TradeRepublic Account sync (AWS WAF handling added)

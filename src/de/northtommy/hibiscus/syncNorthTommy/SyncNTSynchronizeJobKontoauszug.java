@@ -32,14 +32,14 @@ import de.willuhn.logging.Logger;
 import de.willuhn.util.ApplicationException;
 import de.willuhn.util.ProgressMonitor;
 
-public abstract class SyncNTSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug implements SyncNTSynchronizeJob
+public abstract class SyncNTSynchronizeJobKontoauszug extends SynchronizeJobKontoauszug implements SyncNTSynchronizeJob, SyncNTSynchronizeJobKontoauszugLoggerI
 {
 	protected static Hashtable<String,String> passwortHashtable = new Hashtable<String,String>();
 	protected static Charset utf8 = Charset.forName("UTF-8");
 	protected ProgressMonitor monitor;
 	protected ProxyConfig proxyConfig;
 	protected DBIterator<Umsatz> umsaetze;
-	protected WebClient webClient;
+	public WebClient webClient;
 	protected List<KeyValue<String, String>> permanentHeaders = new ArrayList<KeyValue<String, String>>();
 
 	protected abstract SynchronizeBackend getBackend();
@@ -215,7 +215,8 @@ public abstract class SyncNTSynchronizeJobKontoauszug extends SynchronizeJobKont
 		return webClient;
 	}
 
-	protected void log(Level level, String msg) 
+	@Override
+	public void log(Level level, String msg) 
 	{
 		msg = "SyncNT/" + getBackend().getName() + ": " + msg;
 		Logger.write(level, msg);
@@ -223,6 +224,25 @@ public abstract class SyncNTSynchronizeJobKontoauszug extends SynchronizeJobKont
 		{
 			monitor.log(msg);
 		}
+	}
+	@Override
+	public void incrementPercentComplete(int arg0) {
+		var monitorComplete = monitor.getPercentComplete();
+		if (monitorComplete < 80) {
+			monitorComplete +=arg0;
+		};
+		if (monitorComplete > 100) {
+			monitorComplete = 100;
+		}
+		monitor.setPercentComplete(monitorComplete);
+	}
+	
+	@Override
+	public void updatePercentComplete(int arg0) {
+		if (arg0 > 100) {
+			arg0 = 100;
+		}
+		monitor.setPercentComplete(arg0);
 	}
 
 	public abstract boolean process(Konto konto, boolean fetchSaldo, boolean fetchUmsatz, DBIterator<Umsatz> umsaetze, String user, String passwort) throws Exception;
@@ -349,5 +369,15 @@ public abstract class SyncNTSynchronizeJobKontoauszug extends SynchronizeJobKont
 			var text = response.getContentAsString(utf8);
 			return new WebResult(response.getStatusCode(), text, response.getResponseHeaders());
 		}
+	}
+	
+	protected void replaceArrayListEntry(ArrayList<KeyValue<String, String>> list, KeyValue<String, String> newValue) {
+		for (int i = 0; i < list.size(); i++ ) {
+			if ( list.get(i).getKey().compareToIgnoreCase("Cookie")== 0 ) {
+				//headers.remove(headers.get(i));
+				list.set(i, newValue);
+				break;
+			}
+		};
 	}
 }

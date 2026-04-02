@@ -16,7 +16,7 @@
 
       <resolver:dependency groupId ="org.eclipse.jetty.websocket" artifactId="websocket-client" version="9.4.57.v20241219" />
     	
-<!--     <resolver:dependency groupId="com.microsoft.playwright" artifactId="playwright" version="1.52.0" />-->
+      <resolver:dependency groupId="com.microsoft.playwright" artifactId="playwright" version="1.56.0" />
 <!-- Maven-Version ist für Java >17 compiliert, daher nicht nutzbar -->
 <!--      <resolver:dependency groupId="io.github.kihdev.playwright-stealth-4j" artifactId="playwright-stealth-4j" version="1.0.0" />-->
     </resolver:dependencies>

@@ -20,6 +20,7 @@ import org.eclipse.jetty.websocket.api.annotations.WebSocket;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJobKontoauszugLoggerI;
 import de.willuhn.logging.Level;
 import de.willuhn.util.ApplicationException;
 
@@ -31,7 +32,7 @@ public class TraderepublicWebSocket {
 		public JSONObject details = null;
 	}
 	
-	protected TraderepublicSynchronizeJobKontoauszugI syncJob = null;
+	protected SyncNTSynchronizeJobKontoauszugLoggerI syncJobLogger = null;
 	
 	private enum ProtoRequestStates{
 		SUBSCRIBED,
@@ -134,11 +135,11 @@ public class TraderepublicWebSocket {
     
     private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     
-    public TraderepublicWebSocket(TraderepublicSynchronizeJobKontoauszugI syncJob, String version, Date rxDateRangeUntil) {
-		if (syncJob == null) {
+    public TraderepublicWebSocket(SyncNTSynchronizeJobKontoauszugLoggerI syncJobLogger, String version, Date rxDateRangeUntil) {
+		if (syncJobLogger == null) {
 			throw new NullPointerException("syncJob must not be null");
 		}
-    	this.syncJob = syncJob;
+    	this.syncJobLogger = syncJobLogger;
     	this.clientVersion = version;
     	this.rxDateRangeUntil = rxDateRangeUntil;
 	}
@@ -149,14 +150,14 @@ public class TraderepublicWebSocket {
 
     @OnWebSocketConnect
     public void onConnect(Session session) {
-        syncJob.logging(Level.DEBUG, "WebSocket connected"); 
+        syncJobLogger.log(Level.DEBUG, "WebSocket connected"); 
         this.session = session;
         try {
         	String s = "connect 31  {\"locale\":\"en\",\"platformId\":\"webtrading\",\"platformVersion\":\"firefox - 140.0.0\",\"clientId\":\"app.traderepublic.com\",\"clientVersion\":\"" + this.clientVersion + "\"}";
-    		syncJob.logging(Level.DEBUG, "WebSocket request subproto connect: " + s);
+    		syncJobLogger.log(Level.DEBUG, "WebSocket request subproto connect: " + s);
 			session.getRemote().sendString(s);
 		} catch (IOException e) {
-			syncJob.logging(Level.ERROR, "WebSocket error subproto connect request: " + e.getMessage());
+			syncJobLogger.log(Level.ERROR, "WebSocket error subproto connect request: " + e.getMessage());
     		this.errorException = e;
 		}
     }
@@ -170,12 +171,12 @@ public class TraderepublicWebSocket {
     		return;
     	}
     	
-    	syncJob.logging(Level.DEBUG, "WebSocket Received message: " + msg);
+    	syncJobLogger.log(Level.DEBUG, "WebSocket Received message: " + msg);
     	//var msgId = Integer.parseInt(msg.substring(0, msg.indexOf(" ")));
     	//protoCounter = msgId + 1;
         try {
 	        if ((msg.compareToIgnoreCase("connected") == 0) && (!this.protoConnected)) {
-	        	syncJob.logging(Level.DEBUG, "WebSocket subproto connected:");
+	        	syncJobLogger.log(Level.DEBUG, "WebSocket subproto connected:");
 	        	this.protoConnected = true;
 	        	
 	        	// send initial transactions request and cash request
@@ -183,21 +184,21 @@ public class TraderepublicWebSocket {
 	        	// remember sPC for response
 	        	protoAvailableCashSubscription = sPC;
 	        	String s = "sub " + sPC + " {\"type\":\"availableCash\"}";
-	        	syncJob.logging(Level.DEBUG, "WebSocket request avail chash info: " + s);
+	        	syncJobLogger.log(Level.DEBUG, "WebSocket request avail chash info: " + s);
 	        	this.session.getRemote().sendString(s);
 	        	
 	        	sPC = protoCounter++;
 	        	// remember sPC for response
 	        	protoCashSubscription = sPC;
 	        	s = "sub " + sPC + " {\"type\":\"cash\"}";
-	        	syncJob.logging(Level.DEBUG, "WebSocket request chash info: " + s);
+	        	syncJobLogger.log(Level.DEBUG, "WebSocket request chash info: " + s);
 	        	this.session.getRemote().sendString(s);
 	        	
 
 	        	sPC = protoCounter++;
 	    		protoTransactionSubscriptions.put(sPC, ProtoRequestStates.SUBSCRIBED);
 	    		s = "sub " + sPC + " {\"type\":\"timelineTransactions\"}";
-	    		syncJob.logging(Level.DEBUG, "WebSocket request first transactions: " + s);
+	    		syncJobLogger.log(Level.DEBUG, "WebSocket request first transactions: " + s);
 	        	this.session.getRemote().sendString(s);
 	        } else if (protoConnected) {
 	        	// check for all expected responses for outstanding requests
@@ -205,7 +206,7 @@ public class TraderepublicWebSocket {
 	    		// check if its response for transaction request
 	    		if (protoTransactionSubscriptions.containsKey(msgId)) {
 	    			var value = protoTransactionSubscriptions.get(msgId);
-	    			syncJob.logging(Level.DEBUG, "WebSocket transaction request msg response");
+	    			syncJobLogger.log(Level.DEBUG, "WebSocket transaction request msg response");
 	    			switch(value) {
 	    				case SUBSCRIBED:
 	    					// if "id A JSON" -> analyse array 
@@ -238,7 +239,7 @@ public class TraderepublicWebSocket {
 	    						}
 	    						
 	    						if ( lastTransactionDate != null) {
-	    							syncJob.logging(Level.DEBUG, "WebSocket received transactions until " + lastTransactionDate.toLocaleString() + "( > " + rxDateRangeUntil + ")");
+	    							syncJobLogger.log(Level.DEBUG, "WebSocket received transactions until " + lastTransactionDate.toLocaleString() + "( > " + rxDateRangeUntil + ")");
 	    						}
 	    						// check cursors (more avail if after cursor is set) and if we need to request further transactions
 	    						var afterCursor = jsonCursors.optString("after");
@@ -248,10 +249,10 @@ public class TraderepublicWebSocket {
 	    						if ( (! afterCursor.isBlank()) && (lastTransactionDate != null) && ( (this.rxDateRangeUntil == null) || (lastTransactionDate.after(this.rxDateRangeUntil))) ) {
 	    							protoTransactionSubscriptions.put(Integer.valueOf(protoCounter), ProtoRequestStates.SUBSCRIBED);
 	    							String s = "sub " + this.protoCounter++ + " {\"type\":\"timelineTransactions\", \"after\":\"" + afterCursor + "\"}";
-									syncJob.logging(Level.DEBUG, "WebSocket request further transactions: " + s);
+									syncJobLogger.log(Level.DEBUG, "WebSocket request further transactions: " + s);
 	    							this.session.getRemote().sendString(s);
 	    						} else {
-	    							syncJob.logging(Level.INFO, "Ums\u00E4tze abgerufen.");
+	    							syncJobLogger.log(Level.INFO, "Ums\u00E4tze abgerufen.");
 	    							this.rxState = RxState.WAIT_REMAINING_SUBS;
 	    						}
 	    						// we only expect A in this case
@@ -266,7 +267,7 @@ public class TraderepublicWebSocket {
 	    					// if C -> unsub and remove from subscriptionArray
 	    					// if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
 	    					String s = "unsub " + msgId;
-	    		    		syncJob.logging(Level.DEBUG, "WebSocket transaction request finished: " + s);
+	    		    		syncJobLogger.log(Level.DEBUG, "WebSocket transaction request finished: " + s);
 	    					session.getRemote().sendString(s);
 	    					protoTransactionSubscriptions.remove(msgId);
 	    					break;
@@ -278,7 +279,7 @@ public class TraderepublicWebSocket {
 	    		else if (protoTransactionDetailSubscriptions.containsKey(msgId)) {
 	    			// response for transaction detail request
 	    			var valueDetails = protoTransactionDetailSubscriptions.get(msgId);
-    				syncJob.logging(Level.DEBUG, "WebSocket transaction detail request msg response");
+    				syncJobLogger.log(Level.DEBUG, "WebSocket transaction detail request msg response");
     				if (valueDetails.details == null) {
     					// still no details received - add them from msg
     					// if "id A JSON" -> analyse array 
@@ -293,7 +294,7 @@ public class TraderepublicWebSocket {
     					// details already received
     					// if (msg.charAt(msg.indexOf(" ") + 1) == 'C') {
     					String s = "unsub " + msgId;
-    		    		syncJob.logging(Level.DEBUG, "WebSocket transaction detail request finished: " + s);
+    		    		syncJobLogger.log(Level.DEBUG, "WebSocket transaction detail request finished: " + s);
     					session.getRemote().sendString(s);
     					protoTransactionDetailSubscriptions.remove(msgId);
     				}
@@ -303,12 +304,12 @@ public class TraderepublicWebSocket {
     					// still no accounts - add them from msg
     					// if "id A JSON" -> analyse array 
     					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
-    						syncJob.logging(Level.DEBUG, "WebSocket got account cash");
+    						syncJobLogger.log(Level.DEBUG, "WebSocket got account cash");
     						JSONArray json = new JSONArray(msg.substring(msg.indexOf(" ") + 3));
     						accountsCash = json;
     						
     						String s = "unsub " + msgId;
-        		    		syncJob.logging(Level.DEBUG, "WebSocket getting account cash finished: " + s);
+        		    		syncJobLogger.log(Level.DEBUG, "WebSocket getting account cash finished: " + s);
         					session.getRemote().sendString(s);
         					protoTransactionDetailSubscriptions.remove(msgId);
         					protoCashSubscription = 0;
@@ -323,12 +324,12 @@ public class TraderepublicWebSocket {
     					// still no accounts - add them from msg
     					// if "id A JSON" -> analyse array 
     					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
-    						syncJob.logging(Level.DEBUG, "WebSocket got account available cash");
+    						syncJobLogger.log(Level.DEBUG, "WebSocket got account available cash");
     						JSONArray json = new JSONArray(msg.substring(msg.indexOf(" ") + 3));
     						accountsAvailableCash = json;
     						
     						String s = "unsub " + msgId;
-        		    		syncJob.logging(Level.DEBUG, "WebSocket getting account available cash finished: " + s);
+        		    		syncJobLogger.log(Level.DEBUG, "WebSocket getting account available cash finished: " + s);
         					session.getRemote().sendString(s);
         					protoTransactionDetailSubscriptions.remove(msgId);
         					protoAvailableCashSubscription = 0;
@@ -342,7 +343,7 @@ public class TraderepublicWebSocket {
 	    		}
 	        }
         } catch (Exception e) {
-    		syncJob.logging(Level.ERROR, "WebSocket error parsing rx message: " + e.getMessage());
+    		syncJobLogger.log(Level.ERROR, "WebSocket error parsing rx message: " + e.getMessage());
     		this.errorException = e;
     		rxState = RxState.FINISHED;
     	}
@@ -351,7 +352,7 @@ public class TraderepublicWebSocket {
         	(protoTransactionDetailSubscriptions.isEmpty()) &&
         	(protoCashSubscription == 0) &&
         	(protoAvailableCashSubscription == 0) ) {
-        	this.syncJob.logging(Level.ERROR, "WebSocket finished");
+        	this.syncJobLogger.log(Level.ERROR, "WebSocket finished");
         	rxState = RxState.FINISHED;
         }
     }
@@ -359,14 +360,14 @@ public class TraderepublicWebSocket {
     @OnWebSocketClose
     public void onClose(int statusCode, String reason) {
         System.out.println("Connection closed: " + reason);
-        syncJob.logging(Level.DEBUG, "WebSocket connection closed");
+        syncJobLogger.log(Level.DEBUG, "WebSocket connection closed");
         closeLatch.countDown();
     }
 
     @OnWebSocketError
     public void onError(Throwable cause) {
         System.err.println("WebSocket error: " + cause.getMessage());
-        this.syncJob.logging(Level.ERROR, "WebSocket connection error: " + cause.getMessage());
+        this.syncJobLogger.log(Level.ERROR, "WebSocket connection error: " + cause.getMessage());
         this.errorException = new Exception(cause);
     }
 }
