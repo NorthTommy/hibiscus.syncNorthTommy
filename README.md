@@ -8,8 +8,8 @@ Unterstützung für den Umsatz- und Saldoabruf bei folgenden Banken
 Entweder das Plugin als ZIP-File aus den Github-Releases in Hibiscus importieren, oder in den Jameica-Einstellungen unter *Plugins / Repositories bearbeiten* die URL *https://northtommy.linkpc.net/hibiscus/* ergänzen und unter *verfügbare Plugins* auswählen. Beim ersten Mal muss das Zertifikat akzeptiert werden, daher hier zum Abgleich:
 - Common Name (CN) *northtommy.linkpc.net*
 - Organisation (O) --
-- SHA256: 51:79:3A:DE:97:A5:05:06:6A:94:AB:60:2E:20:70:07:6C:06:3C:39:5F:73:EA:AB:7C:E4:63:40:F5:13:7C:4E
-- SHA1: 5D:AA:B3:18:BD:97:8C:02:07:DF:A2:6B:4A:3B:76:FC:0A:63:5A:7F
+- SHA256: 64:DA:3A:D5:C4:C4:77:20:ED:9B:04:A4:E5:AF:2D:9D:A6:91:0A:D1:6E:06:E4:48:64:56:AC:B3:53:DC:CC:E5
+- SHA1: D5:68:6A:7C:88:07:10:B2:98:75:4F:09:D7:E4:F7:07:0E:5C:D9:AD
   
 Konten müssen von Hand angelegt werden, dafür unter **Konten** auf **Konto manuell anlegen** gehen. Keinen Haken bei **Offline-Konto** setzen!
 
@@ -32,7 +32,7 @@ Die Unterkontonummer muss den letzten 4 Ziffern der VISA-Karte entsprechen.
 ### TradeRepublic
 Hier muss die Kundenkennung mit der verknüpften Telefonnummer im Format +49xxxx (f. Dtl). übereinstimmen. Im Dropdown **Zugangsweg** *Traderepublic* ausgewählen.
 Die IBAN muss korrekt gesetzt sein, wodurch sich die BLZ von 10012345 ergeben muss (wird wenn leer, bei der Eingabe der IBAN automatisch gesetzt).
-Die damit gesetzte Kontonummer ist ebenfalls wichtig, damit der Saldo-Abgleich funktioniert.
+Die Kontonummer ist ebenfalls wichtig, damit der Saldo-Abgleich funktioniert. Idealerweise ergibt sie sich direkt aus der IBAN. Hinweis: In einigen Fällen ist als Kontonummer die 10-stellige Depotnummer zu nutzen, die sich in den letzten Ziffern von der Verrechnungs-/Girokontonummer unterscheidet. Also mal probieren welche Nummer man hat. Auf der Desktop-Seite kann man unter Profil>Settings>Accounts beide Nummern einsehen. 
 
 Hinweis: Bei dem Support von TradeRepublic soll es NICHT um eine Depotunterstützung gehen. Vielmehr soll das Konto selbst samt allen Transaktionen synchronisiert werden können.
 Dass dabei Depot-Bewegungen auftrauchen ist dem geschuldet, dass das Konto neben üblichen Bewegungen eben auch als Verrechnungskonto für das Depot dient.
