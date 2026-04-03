@@ -103,12 +103,17 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		log(Level.INFO, "Warte auf AWS WAF token vom Browser");
 		this.pwrt.start();
 		// waiting playwright tread got a first token
-		int pwrtTimeout = 250;
+		int pwrtTimeout = 120; /* times 1s -> 2min */
 		while (pwrt.isAlive() && (pwrt.awsWafToken == null) && (pwrtTimeout-- > 0)) {
-			Thread.sleep(100);
+			Thread.sleep(1000);
+			log(Level.INFO, ".");
+		}
+		if (!pwrt.isAlive()) {
+			log(Level.WARN, "unable to start playwright with background browser");
+			throw new ApplicationException("Fehler beim Starten von Playwright fuer AWS WAF token");
 		}
 		if (pwrt.awsWafToken == null) {
-			log(Level.DEBUG, "got no AWS WAF token in time");
+			log(Level.WARN, "got no AWS WAF token in time");
 			throw new ApplicationException("Zeitueberschreitung AWS WAF token");
 		}
 		

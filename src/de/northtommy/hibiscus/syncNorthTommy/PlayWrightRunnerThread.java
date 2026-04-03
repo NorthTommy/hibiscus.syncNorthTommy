@@ -65,7 +65,8 @@ public class PlayWrightRunnerThread extends Thread {
 		Browser browser = null;
 		try 
 		{
-			Playwright playwright = Playwright.create(); 
+			Playwright playwright = Playwright.create();
+			syncJobLogger.log(Level.INFO, "Playwright gestartet, waehle Browser...");
 			var options1 = new BrowserType.LaunchOptions().setHeadless(headlessBrowser);
 			var proxyConfig = webClient.getOptions().getProxyConfig();
 			if (proxyConfig != null && proxyConfig.getProxyHost() != null)
@@ -100,13 +101,15 @@ public class PlayWrightRunnerThread extends Thread {
 				syncJobLogger.log(Level.INFO, "Verwende Firefox von Playwright");
 			}
 			
+			syncJobLogger.log(Level.INFO, "Playwright gestartet, starte Browser...");
 			browser = playwright.firefox().launch(options1);
-
+			
+			syncJobLogger.log(Level.INFO, "Playwright gestartet, stealth context");
 			var stealthContext = Stealth4j.newStealthContext(browser, Stealth4jConfig.builder().navigatorLanguages(true, List.of("de-DE", "de")).build());
 			stealthContext.setExtraHTTPHeaders(Map.of("DNT", "1"));
 			pwPage = stealthContext.newPage();
 			
-			syncJobLogger.log(Level.DEBUG, "Navigate to: " + urlToLoad);
+			syncJobLogger.log(Level.INFO, "Navigate to: " + urlToLoad);
 			pwPage.navigate(urlToLoad);				
 		}
 		catch (Exception e)
@@ -132,23 +135,24 @@ public class PlayWrightRunnerThread extends Thread {
 				
 				// try to find the token inside the response and update the stored token
 				awsWafToken = json.optString("token");
-				syncJobLogger.log(Level.DEBUG, "got new token: " + awsWafToken);
+				syncJobLogger.log(Level.INFO, "got new AWS WAF token: " + awsWafToken);
                 if (awsWafToken != null) {
-                    syncJobLogger.log(Level.DEBUG, "Aktueller Token: " + awsWafToken);
+                    syncJobLogger.log(Level.DEBUG, "Aktueller AWS WAF token: " + awsWafToken);
                 }
                 Thread.yield();
                 Thread.sleep(1);
             }
+            syncJobLogger.log(Level.INFO, "PlayWrightRunnerThread wird beendet");
         } catch (InterruptedException e) {
-            syncJobLogger.log(Level.DEBUG, "PlayWrightRunnerThread wurde unterbrochen");
+            syncJobLogger.log(Level.WARN, "PlayWrightRunnerThread wurde unterbrochen");
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             syncJobLogger.log(Level.WARN, "PlayWrightRunnerThread Fehler beim Token-Lesen: " + e.getMessage());
         } finally {
-        	syncJobLogger.log(Level.DEBUG, "PlayWrightRunnerThread close browser");
+        	syncJobLogger.log(Level.INFO, "PlayWrightRunnerThread close browser");
         	if (pwPage != null) pwPage.close();
 			if (browser != null) browser.close();
-            syncJobLogger.log(Level.DEBUG, "PlayWrightRunnerThread browser closed");
+            syncJobLogger.log(Level.INFO, "PlayWrightRunnerThread browser closed");
         }
     }
 

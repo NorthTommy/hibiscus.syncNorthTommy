@@ -15,3 +15,4 @@ Version		Date			Change
 							Added TradeRepublic debug messages
 							Zertifikatserneuerung
 0.3.0		2026-03-31		Fixed TradeRepublic Account sync (AWS WAF handling added)
+0.3.1		2026-04-03		Increment timeout for starting firefox in background for Traderepublic
