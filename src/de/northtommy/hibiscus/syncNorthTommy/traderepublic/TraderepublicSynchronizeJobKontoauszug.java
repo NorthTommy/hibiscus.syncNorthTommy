@@ -48,6 +48,7 @@ import de.willuhn.jameica.hbci.messaging.ObjectChangedMessage;
 import de.willuhn.jameica.hbci.messaging.ObjectDeletedMessage;
 import de.willuhn.jameica.hbci.messaging.SaldoMessage;
 import de.willuhn.jameica.hbci.rmi.Konto;
+import de.willuhn.jameica.hbci.rmi.KontoType;
 import de.willuhn.jameica.hbci.rmi.Umsatz;
 import de.willuhn.jameica.hbci.synchronize.SynchronizeBackend;
 import de.willuhn.jameica.system.Application;
@@ -417,8 +418,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             if (socket.getRxState() != RxState.FINISHED) {
             	throw new ApplicationException("Synchronisation Timeout");
             }
-            
-            
+            if (KontoType.WERTPAPIERDEPOT.getValue() == konto.getAccountType()) {
+				return new TraderepublicDepotSynchronizeJob(this).process(konto, fetchSaldo, fetchUmsatz, socket);
+            }
             if (fetchSaldo) {
             	boolean foundAccount = false;
             	var accountsCash = socket.getAccountsCash();

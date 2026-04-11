@@ -34,8 +34,10 @@ Hier muss die Kundenkennung mit der verknüpften Telefonnummer im Format +49xxxx
 Die IBAN muss korrekt gesetzt sein, wodurch sich die BLZ von 10012345 ergeben muss (wird wenn leer, bei der Eingabe der IBAN automatisch gesetzt).
 Die Kontonummer ist ebenfalls wichtig, damit der Saldo-Abgleich funktioniert. Idealerweise ergibt sie sich direkt aus der IBAN. Hinweis: In einigen Fällen ist als Kontonummer die 10-stellige Depotnummer zu nutzen, die sich in den letzten Ziffern von der Verrechnungs-/Girokontonummer unterscheidet. Also mal probieren welche Nummer man hat. Auf der Desktop-Seite kann man unter Profil>Settings>Accounts beide Nummern einsehen. 
 
-Hinweis: Bei dem Support von TradeRepublic soll es NICHT um eine Depotunterstützung gehen. Vielmehr soll das Konto selbst samt allen Transaktionen synchronisiert werden können.
-Dass dabei Depot-Bewegungen auftrauchen ist dem geschuldet, dass das Konto neben üblichen Bewegungen eben auch als Verrechnungskonto für das Depot dient.
+Depot
+
+In Verbindung mit dem Plugin Depot-Viewer kann auch das Depot abgerufen werden.
+Hierfür muss ein Konto analog zum Verrechnungskonto angelegt werden. Jedoch muss als Kontoart "Wertpapierdepot" ausgewählt werden.
 
 #### Bekannte Probleme / Einschränkungen
 - Einige der Umsatztypen können noch unbekannt sein (dann wird bei "Art" als "Sonstiges (<type>)" eingetragen). In dem Falle gerne ein passenden Hinweis mit dem Typen und um welche Art von Buchung es sich handelt.

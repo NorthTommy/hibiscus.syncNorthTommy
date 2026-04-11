@@ -81,6 +81,24 @@ public class TraderepublicWebSocket {
 	public JSONArray getAccountsCash() {
 		return accountsCash;
 	}
+
+	private JSONObject compactPortfolio = null;
+
+	public JSONObject getCompactPortfolio() {
+		return compactPortfolio;
+	}
+
+	private HashMap<String, JSONObject> portfolioInstrumentDetails = new HashMap<String, JSONObject>();
+
+	public JSONObject getPortfolioInstrumentDetails(String instrumentId) {
+		return portfolioInstrumentDetails.get(instrumentId);
+	}
+
+	private HashMap<String, JSONObject> portfolioTicker = new HashMap<String, JSONObject>();
+
+	public JSONObject getPortfolioTicker(String instrumentId) {
+		return portfolioTicker.get(instrumentId);
+	}
 	
 	/**
 	 * ordered list of transactions with transaction and detail data
@@ -123,6 +141,9 @@ public class TraderepublicWebSocket {
     // protoCounter for cash data
     private int protoCashSubscription = 0;
     private int protoAvailableCashSubscription = 0;
+    private int protoCompactPortfolioSubscription = 0;
+    private HashMap<Integer, String> protoPortfolioInstrumentSubscriptions = new HashMap<Integer, String>();
+    private HashMap<Integer, String> protoPortfolioTickerSubscriptions = new HashMap<Integer, String>();
     
     /**
      * key: protoCounter
@@ -171,7 +192,7 @@ public class TraderepublicWebSocket {
     		return;
     	}
     	
-    	syncJobLogger.log(Level.DEBUG, "WebSocket Received message: " + msg);
+    	//syncJobLogger.log(Level.DEBUG, "WebSocket Received message: " + msg);
     	//var msgId = Integer.parseInt(msg.substring(0, msg.indexOf(" ")));
     	//protoCounter = msgId + 1;
         try {
@@ -192,6 +213,12 @@ public class TraderepublicWebSocket {
 	        	protoCashSubscription = sPC;
 	        	s = "sub " + sPC + " {\"type\":\"cash\"}";
 	        	syncJobLogger.log(Level.DEBUG, "WebSocket request chash info: " + s);
+	        	this.session.getRemote().sendString(s);
+	        	
+	        	sPC = protoCounter++;
+	        	protoCompactPortfolioSubscription = sPC;
+	        	s = "sub " + sPC + " {\"type\":\"compactPortfolio\"}";
+	        	syncJobLogger.log(Level.DEBUG, "WebSocket request compact portfolio: " + s);
 	        	this.session.getRemote().sendString(s);
 	        	
 
@@ -222,18 +249,22 @@ public class TraderepublicWebSocket {
 	        						tr.transaction = jsonTransaction;
 	        						tr.details = null;
 	        						accountTransactions.add(tr);
-	        						// Details do not contain any structured non-visual content :-(
-	        						//String action = jsonTransaction.optString("action");
-	        						// received action seems to have an unsupported subscription type ("errorCode":"BAD_SUBSCRIPTION_TYPE") -> timelineDetail does not work fine
-	        						//if (!action.isBlank()) {
-	        							//sPC = protoCounter++;
-	        							//protoTransactionDetailSubscriptions.put(sPC, tr);
-	        							//String s = "sub " + sPC + " {\"type\":\"timelineDetailV2\", \"id\":\"" + jsonTransaction.getString("id") + "\"}";
-	        							//String s = "sub " + sPC + " " + action;
-	        							//syncJob.logging(Level.DEBUG, "WebSocket request transactions details: " + s);
-	        							//this.session.getRemote().sendString(s);
-	        						//}
-	        			        	
+	        						JSONObject action = jsonTransaction.optJSONObject("action");
+	        						String transactionId = jsonTransaction.optString("id");
+	        						if ((action != null) &&
+	        								"timelineDetail".equals(action.optString("type")) &&
+	        								transactionId.equals(action.optString("payload"))) {
+	        							sPC = protoCounter++;
+	        							protoTransactionDetailSubscriptions.put(sPC, tr);
+	        							String s = "sub " + sPC + " {\"type\":\"timelineDetailV2\", \"id\":\"" + transactionId + "\"}";
+	        							syncJobLogger.log(Level.DEBUG, "WebSocket request transaction details: " + s);
+	        							this.session.getRemote().sendString(s);
+	        						} else if ((action != null) || (!jsonTransaction.optString("actionLabel").isBlank())) {
+	        							syncJobLogger.log(Level.DEBUG, "WebSocket skip transaction details for " + transactionId
+	        									+ ": unsupported action type=" + (action != null ? action.optString("type") : "<none>")
+	        									+ " payload=" + (action != null ? action.optString("payload") : "<none>"));
+	        						}
+	        						
 	        			        	// remember date of the transaction
 	        						lastTransactionDate = dateFormat.parse(jsonTransaction.getString("timestamp"));
 	    						}
@@ -321,9 +352,9 @@ public class TraderepublicWebSocket {
 	    		}
 	    		else if (protoAvailableCashSubscription == msgId) {
 	    			if (accountsAvailableCash == null) {
-    					// still no accounts - add them from msg
-    					// if "id A JSON" -> analyse array 
-    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+	    				// still no accounts - add them from msg
+	    				// if "id A JSON" -> analyse array 
+	    				if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
     						syncJobLogger.log(Level.DEBUG, "WebSocket got account available cash");
     						JSONArray json = new JSONArray(msg.substring(msg.indexOf(" ") + 3));
     						accountsAvailableCash = json;
@@ -335,8 +366,75 @@ public class TraderepublicWebSocket {
         					protoAvailableCashSubscription = 0;
     					} else {
     						// includes <msgId> E ....
-    						throw new ApplicationException("Fehler beim Abrufen des verfügbaren Saldo: " + msg);
-    					}
+	    					throw new ApplicationException("Fehler beim Abrufen des verfügbaren Saldo: " + msg);
+	    				}
+	    			}
+	    		} else if (protoCompactPortfolioSubscription == msgId) {
+	    			if (compactPortfolio == null) {
+	    				if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+	    					syncJobLogger.log(Level.DEBUG, "WebSocket got compact portfolio");
+	    					compactPortfolio = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
+	    					JSONArray positions = compactPortfolio.optJSONArray("positions");
+	    					if (positions != null) {
+	    						for (int i = 0; i < positions.length(); i++) {
+	    							JSONObject position = positions.optJSONObject(i);
+	    							if (position == null) {
+	    								continue;
+	    							}
+	    							String instrumentId = position.optString("instrumentId");
+	    							if (instrumentId.isBlank() || portfolioInstrumentDetails.containsKey(instrumentId) || protoPortfolioInstrumentSubscriptions.containsValue(instrumentId)) {
+	    								continue;
+	    							}
+	    							sPC = protoCounter++;
+	    							protoPortfolioInstrumentSubscriptions.put(sPC, instrumentId);
+	    							String s = "sub " + sPC + " {\"type\":\"instrument\", \"id\":\"" + instrumentId + "\"}";
+	    							syncJobLogger.log(Level.DEBUG, "WebSocket request portfolio instrument details: " + s);
+	    							session.getRemote().sendString(s);
+	    						}
+	    					}
+	    					
+	    					String s = "unsub " + msgId;
+	    		    		syncJobLogger.log(Level.DEBUG, "WebSocket getting compact portfolio finished: " + s);
+	    					session.getRemote().sendString(s);
+	    					protoCompactPortfolioSubscription = 0;
+	    				} else {
+	    					throw new ApplicationException("Fehler beim Abrufen des Portfolios: " + msg);
+	    				}
+	    			}
+	    		} else if (protoPortfolioInstrumentSubscriptions.containsKey(msgId)) {
+	    			if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+	    				String instrumentId = protoPortfolioInstrumentSubscriptions.remove(msgId);
+	    				JSONObject instrumentDetails = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
+	    				portfolioInstrumentDetails.put(instrumentId, instrumentDetails);
+	    				JSONArray exchangeIds = instrumentDetails.optJSONArray("exchangeIds");
+	    				if ((exchangeIds != null) && (exchangeIds.length() > 0)) {
+	    					String exchangeId = exchangeIds.optString(0);
+	    					if (!exchangeId.isBlank()) {
+	    						sPC = protoCounter++;
+	    						protoPortfolioTickerSubscriptions.put(sPC, instrumentId);
+	    						String s = "sub " + sPC + " {\"type\":\"ticker\", \"id\":\"" + instrumentId + "." + exchangeId + "\"}";
+	    						syncJobLogger.log(Level.DEBUG, "WebSocket request portfolio ticker: " + s);
+	    						session.getRemote().sendString(s);
+	    					}
+	    				}
+
+	    				String s = "unsub " + msgId;
+	    		    	syncJobLogger.log(Level.DEBUG, "WebSocket getting portfolio instrument details finished: " + s);
+	    				session.getRemote().sendString(s);
+	    			} else {
+	    				throw new ApplicationException("Fehler beim Abrufen der Portfolio-Details: " + msg);
+	    			}
+	    		} else if (protoPortfolioTickerSubscriptions.containsKey(msgId)) {
+	    			if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+	    				String instrumentId = protoPortfolioTickerSubscriptions.remove(msgId);
+	    				JSONObject tickerDetails = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
+	    				portfolioTicker.put(instrumentId, tickerDetails);
+
+	    				String s = "unsub " + msgId;
+	    		    	syncJobLogger.log(Level.DEBUG, "WebSocket getting portfolio ticker finished: " + s);
+	    				session.getRemote().sendString(s);
+	    			} else {
+	    				throw new ApplicationException("Fehler beim Abrufen des Portfolio-Tickers: " + msg);
 	    			}
 	    		} else {
 	    			// ignore msg - not subscribed
@@ -351,7 +449,10 @@ public class TraderepublicWebSocket {
         	(protoTransactionSubscriptions.isEmpty()) &&
         	(protoTransactionDetailSubscriptions.isEmpty()) &&
         	(protoCashSubscription == 0) &&
-        	(protoAvailableCashSubscription == 0) ) {
+        	(protoAvailableCashSubscription == 0) &&
+        	(protoCompactPortfolioSubscription == 0) &&
+        	(protoPortfolioInstrumentSubscriptions.isEmpty()) &&
+        	(protoPortfolioTickerSubscriptions.isEmpty()) ) {
         	this.syncJobLogger.log(Level.ERROR, "WebSocket finished");
         	rxState = RxState.FINISHED;
         }
