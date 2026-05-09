@@ -16,3 +16,4 @@ Version		Date			Change
 							Zertifikatserneuerung
 0.3.0		2026-03-31		Fixed TradeRepublic Account sync (AWS WAF handling added)
 0.3.1		2026-04-03		Increment timeout for starting firefox in background for Traderepublic
+0.3.2		2026-05-09		Fix version output in logfile; Fix passkey wallet entry to northtommy; Fix build launcher for eclipse

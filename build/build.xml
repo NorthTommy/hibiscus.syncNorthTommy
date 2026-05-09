@@ -54,8 +54,8 @@
     <echo message="JAVA   : ${java.version}" />
     <echo message="GIT    : ${git.revision}" />
 
-    <replaceregexp file="${src.dir}/de/northtommy/hibiscus/syncNorthTommy/Version.java" match="BUILD = &quot;[^&quot;]+&quot;" replace="BUILD = &quot;${git.revision}&quot;" />
-  	<replaceregexp file="${src.dir}/de/northtommy/hibiscus/syncNorthTommy/Version.java" match="VERSION = &quot;[^&quot;]+&quot;" replace="VERSION = &quot;${plugin.version}&quot;" />
+    <replaceregexp file="${src.dir}/de/northtommy/hibiscus/syncNorthTommy/Version.java" match="BUILD = &quot;[^&quot;]*&quot;" replace="BUILD = &quot;${git.revision}&quot;" />
+  	<replaceregexp file="${src.dir}/de/northtommy/hibiscus/syncNorthTommy/Version.java" match="VERSION = &quot;[^&quot;]*&quot;" replace="VERSION = &quot;${plugin.version}&quot;" />
 
     <path id="compilepath">
       <pathelement path="${define.compilepath}" />

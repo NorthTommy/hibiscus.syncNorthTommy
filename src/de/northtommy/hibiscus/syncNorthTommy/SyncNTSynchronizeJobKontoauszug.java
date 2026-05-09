@@ -112,7 +112,7 @@ public abstract class SyncNTSynchronizeJobKontoauszug extends SynchronizeJobKont
 			var wallet = de.willuhn.jameica.hbci.Settings.getWallet();
 			var cachePins = de.willuhn.jameica.hbci.Settings.getCachePin();
 			var storePins = de.willuhn.jameica.hbci.Settings.getStorePin();
-			var walletAlias = "de.gnampf.syncusgnampfus." + getName() + "." + user;
+			var walletAlias = "de.northtommy.hibiscus.syncNorthTommy." + getName() + "." + user;
 	
 			log(Level.INFO, "Login f\u00FCr " + user + " ...");
 	
@@ -371,13 +371,17 @@ public abstract class SyncNTSynchronizeJobKontoauszug extends SynchronizeJobKont
 		}
 	}
 	
-	protected void replaceArrayListEntry(ArrayList<KeyValue<String, String>> list, KeyValue<String, String> newValue) {
+	protected void replaceOrAddArrayListEntry(ArrayList<KeyValue<String, String>> list, KeyValue<String, String> newValue) {
+		boolean found = false;
 		for (int i = 0; i < list.size(); i++ ) {
-			if ( list.get(i).getKey().compareToIgnoreCase("Cookie")== 0 ) {
-				//headers.remove(headers.get(i));
+			if ( list.get(i).getKey().compareToIgnoreCase(newValue.getKey())== 0 ) {
+				found = true;
 				list.set(i, newValue);
 				break;
 			}
 		};
+		if (!found) {
+			list.add(newValue);	
+		}
 	}
 }
