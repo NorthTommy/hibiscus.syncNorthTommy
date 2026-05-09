@@ -484,60 +484,92 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 						
 						newUmsatz.setBetrag(transaction.getJSONObject("amount").getDouble("value"));
             			
-						var status = transaction.getString("status");
+		            	String vz = transaction.getString("title"); 
+		            	String vz2 = transaction.optString("subtitle");
+            			if (!vz2.isBlank()) {
+            				vz = vz + " (" +  vz2 + ")";
+            			}
+		            	newUmsatz.setZweck(vz);
+						
+					var status = transaction.getString("status");
 		            	if ( status.compareToIgnoreCase("CANCELED") == 0) {
+		            		newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
 		            		// intentionally no saldo setting
+		            		
+		            		// updating Verwendungszweck optionally
+		            		// e.g. canceled tradings are marked as canceled but do not include a hint for the status in text
+		            		// e.g. rejected card executions are set to canceled and subtitled with "declined"
+		            		if ((newUmsatz.getZweck().indexOf("Declined") == -1) && 
+		            			(newUmsatz.getZweck().indexOf("Canceled") == -1)) {
+		            			newUmsatz.setZweck(newUmsatz.getZweck() + " (Canceled)");	
+		            		}
+		            		
+		            	} else if ( status.compareToIgnoreCase("PENDING") == 0) {
+		            		// intentionally no saldo setting
+		            		newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
+		            		// Verwendungszweck wird nicht angepasst, da hibiscus hier mit dem Flag ausgraut, wird der Umsatz nochmal gefunden wird das flag weggenommen
 		            	} else if ( status.compareToIgnoreCase("EXECUTED") == 0) {
 		            		newUmsatz.setSaldo(calculatedSaldo);
 							calculatedSaldo -= newUmsatz.getBetrag();
 		            	} else {
-							// transaction still not 
-							newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
-							// excluded from saldo setting
-							log(Level.INFO, "Bitte einmal im Logfile nach `\"status\":\"` (!= EXECUTED) suchen und den Eintrag (amount und title kann geschw\u00E4rzt werden) dem Entwickler zusenden - es scheint weitere Umsatz-Stati zu geben, die bisher nicht bekannt sind. Danke");
-						}
+						// transaction still not executed
+						newUmsatz.setFlags(Umsatz.FLAG_NOTBOOKED);
+						// excluded from saldo setting
+						log(Level.INFO, "Bitte einmal im Logfile (DEBUG OUT) nach `\"status\":\"` (!= EXECUTED) suchen und den Eintrag (amount und title kann geschw\u00E4rzt werden) dem Entwickler zusenden - es scheint weitere Umsatz-Stati zu geben, die bisher nicht bekannt sind. Danke");
+					}
 
 		            	var evT = transaction.optString("eventType");
 		            	if ((evT.compareToIgnoreCase("card_successful_transaction") == 0) ||
 	            			(evT.compareToIgnoreCase("OUTGOING_TRANSFER") == 0) ||
 	            			(evT.compareToIgnoreCase("OUTGOING_TRANSFER_DELEGATION") == 0) ||
 	            			(evT.compareToIgnoreCase("PAYMENT_OUTBOUND") == 0) ||
+	            			(evT.compareToIgnoreCase("CARD_TRANSACTION") == 0) ||
 	            			(evT.compareToIgnoreCase("card_order_billed") == 0) ||
 	            			(evT.compareToIgnoreCase("card_successful_atm_withdrawal") == 0) )
 		            			{
 		            		newUmsatz.setArt("Kartenumsatz");
 		            	}
+		            	else if ((evT.compareToIgnoreCase("CARD_CASH_BACK") == 0) ) {
+		            		newUmsatz.setArt("Kartenumsatz mit Geldabhebung");
+		            	}
 		            	else if ((evT.compareToIgnoreCase("card_failed_transaction") == 0) )
 			            		{
 			            		newUmsatz.setArt("Kartenumsatz Fehlgeschlagen/Storno");
 		            	} 
-		            	else if (evT.compareToIgnoreCase("card_successful_verification") == 0) {
+		            	else if ((evT.compareToIgnoreCase("card_successful_verification") == 0) ||
+		            			(evT.compareToIgnoreCase("CARD_VERIFICATION") == 0) ){
 		            		newUmsatz.setArt("Kartenverifikation");
+		            		
 		            	} 
 		            	else if ((evT.compareToIgnoreCase("trading_trade_executed") == 0) ||
 		            			(evT.compareToIgnoreCase("ORDER_EXECUTED") == 0) ||
-		            			(evT.compareToIgnoreCase("SAVINGS_PLAN_EXECUTED") == 0) ||
 		            			(evT.compareToIgnoreCase("SAVINGS_PLAN_INVOICE_CREATED") == 0) ||
 		            			(evT.compareToIgnoreCase("trading_savingsplan_executed") == 0) ||
 		            			(evT.compareToIgnoreCase("trading_trade_executed") == 0) ||
 		            			(evT.compareToIgnoreCase("benefits_spare_change_execution") == 0) ||
 		            			(evT.compareToIgnoreCase("TRADE_INVOICE") == 0) ||
 		            			(evT.compareToIgnoreCase("TRADE_CORRECTED") == 0) ||
-		            			(evT.compareToIgnoreCase("timeline_legacy_migrated_events") == 0) )
+		            			(evT.compareToIgnoreCase("SSP_CORPORATE_ACTION_CASH_AND_STOCK") == 0) ||
+		            			(evT.compareToIgnoreCase("SSP_CORPORATE_ACTION_CASH") == 0) ||
+		            			(evT.compareToIgnoreCase("timeline_legacy_migrated_events") == 0) ||
+		            			(evT.compareToIgnoreCase("SAVINGS_PLAN_EXECUTED") == 0) ||
+		            			(evT.compareToIgnoreCase("SSP_CORPORATE_ACTION_CASH_NON_DIVIDEND") == 0) ||
+		            			(evT.compareToIgnoreCase("SSP_TAX_CORRECTION") == 0) ||
+		            			(evT.compareToIgnoreCase("ssp_corporate_action_invoice_cash") == 0) )
 		            			{
-		            		newUmsatz.setArt("Trading");
+		            		newUmsatz.setArt("Trading ("+evT+")");
 		            	} 
-		            	else if (evT.compareToIgnoreCase("ssp_corporate_action_invoice_cash") == 0) {
-		            		newUmsatz.setArt("Dividendeneingang");
-		            	} 
+		            	else if ((evT.compareToIgnoreCase("SAVEBACK_AGGREGATE") == 0) ||
+		            			(evT.compareToIgnoreCase("ACQUISITION_TRADE_PERK") == 0) ||  
+		            			(evT.compareToIgnoreCase("benefits_saveback_execution") == 0) )
+		            	{
+		            		newUmsatz.setArt("Saveback Trading");
+		            	}
 		            	else if ( (evT.compareToIgnoreCase("INCOMING_TRANSFER_DELEGATION") == 0) ||  
 		            			(evT.compareToIgnoreCase("INCOMING_TRANSFER") == 0) ||
+		            			(evT.compareToIgnoreCase("BANK_TRANSACTION_INCOMING") == 0) ||
 		            			(evT.compareToIgnoreCase("ACCOUNT_TRANSFER_INCOMING") == 0) ) {
 		            		newUmsatz.setArt("Zahlungseingang");
-		            	} 
-		            	else if ( (evT.compareToIgnoreCase("ACQUISITION_TRADE_PERK") == 0) ||  
-		            			(evT.compareToIgnoreCase("benefits_saveback_execution") == 0) ) {
-		            		newUmsatz.setArt("Saveback Trading");
 		            	} 
 		            	else if ((evT.compareToIgnoreCase("INTEREST_PAYOUT") == 0) || 
 		            			(evT.compareToIgnoreCase("INTEREST_PAYOUT_CREATED") == 0) ) {
@@ -547,17 +579,13 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		            	else if (!evT.isBlank()) {
 		            		newUmsatz.setArt("Sonstiges (evenType: " + evT +")");
 		            	}
+		            	else {
+		            		newUmsatz.setArt("Sonstiges (kein eventType gesetzt)");
+		            	}
 		            	
 		            	newUmsatz.setDatum(dateFormat.parse(transaction.getString("timestamp")));
 		            	// wir haben keine Unterscheidung zwischen Valuta und Datum
 		            	newUmsatz.setValuta(newUmsatz.getDatum());
-		            	
-		            	String vz = transaction.getString("title"); 
-		            	String vz2 = transaction.optString("subtitle");
-            			if (!vz2.isBlank()) {
-            				vz = vz + " (" +  vz2 + ")";
-            			}
-		            	newUmsatz.setZweck(vz);
 		            	
 		            	//newUmsatz.setCustomerRef(sR.optJSONObject("merchantDetails").optString("id"));
 		            	
