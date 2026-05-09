@@ -141,12 +141,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		//headers.add(new KeyValue<String, String>("TE", "trailers"));
 		headers.add(new KeyValue<String, String>("X-TR-Platform", "web"));
 		//headers.add(new KeyValue<String, String>("X-TR-App-Version", "3.296.0"));
-//		String awsWafToken = pwrt.awsWafToken;
-//		headers.add(new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//		var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//				"aws-waf-token=" + awsWafToken
-//				));
-//		headers.add(cookieHeaderEntry);
+
 		  
 		// Perform Login getting sessionID ... for further login steps
 		
@@ -178,30 +173,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		}
 		
 		
-//		WebResult response = doRequest(TRADEREP_LOGIN_URL, HttpMethod.POST, headers, "application/json", 
-//				"{\"phoneNumber\":\"" + user + "\",\"pin\":\"" + passwort + "\"}");
-//		
-//		if (response.getHttpStatus() != 200) {
-//			// try with new AWS WAF token
-//			Thread.sleep(300);
-//
-//			// duplicate code above
-//			awsWafToken = pwrt.awsWafToken;
-//			replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//			cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//					"aws-waf-token=" + awsWafToken
-//					));
-//			replaceArrayListEntry(headers, cookieHeaderEntry);
-//			// retry login call
-//			response = doRequest(TRADEREP_LOGIN_URL, HttpMethod.POST, headers, "application/json", 
-//					"{\"phoneNumber\":\"" + user + "\",\"pin\":\"" + passwort + "\"}");
-//		
-//			if (response.getHttpStatus() != 200) {
-//				log(Level.DEBUG, "login Step 1 response: " + response.getContent());
-//				throw new ApplicationException("Login Step 1 fehlgeschlagen");
-//			}
-//		}
-		
+
 		var json = response.getJSONObject();
 		log(Level.DEBUG, "Login step 1 response: " + json);
 		// processId needed for URL for sending SMS-TAN
@@ -251,7 +223,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			replaceOrAddArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
 			var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
 					"JSESSIONID=" + sessId[0],
-					"tr_device=" + tr_device[0],
+					tr_device[0].isBlank() ? null : "tr_device=" + tr_device[0],
 					"aws-waf-token=" + awsWafToken
 					));
 			replaceOrAddArrayListEntry(headers, cookieHeaderEntry);
@@ -272,48 +244,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			throw new ApplicationException("Login Step 2 fehlgeschlagen");
 		}
 		
-		
-		
-//		
-//		
-//		
-//		
-//		
-//		awsWafToken = pwrt.awsWafToken;
-//		replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//		cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//				"JSESSIONID=" + sessId[0],
-//				"tr_device=" + tr_device[0],
-//				"aws-waf-token=" + awsWafToken
-//				));
-//		replaceArrayListEntry(headers, cookieHeaderEntry);
-//		
-//			
-//		response = doRequest(TRADEREP_LOGIN_URL + "/"+ processId + "/" + sca, 
-//				HttpMethod.POST, headers, "application/json", 
-//				null);
-//		
-//		if (response.getHttpStatus() != 200) {
-//			// try with new AWS WAF token
-//			Thread.sleep(100);
-//
-//			// duplicate code above
-//			awsWafToken = pwrt.awsWafToken;
-//			replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//			cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//					"JSESSIONID=" + sessId[0],
-//					"aws-waf-token=" + awsWafToken
-//					));
-//			replaceArrayListEntry(headers, cookieHeaderEntry);
-//			// retry TAN call
-//			response = doRequest(TRADEREP_LOGIN_URL + "/"+ processId + "/" + sca, 
-//					HttpMethod.POST, headers, "application/json", 
-//					null);
-//			if (response.getHttpStatus() != 200) {
-//				log(Level.DEBUG, "Login Step 2 Response: " + response.getContent());
-//				throw new ApplicationException("Login Step 2 fehlgeschlagen");
-//			}
-//		}
+
 		log(Level.DEBUG, "Login Step 2 Response: " + response.getContent());
 		
 		
@@ -374,7 +305,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 					"JSESSIONID=" + sessId[0],
 					"tr_session=" + tr_session[0],
 					"tr_claims=" + tr_claims[0],
-					"tr_device=" + tr_device[0],
+					tr_device[0].isBlank() ? null : "tr_device=" + tr_device[0],
 					"tr_refresh=" + tr_refresh[0],
 					"tr_external_id=" + tr_external_id[0],
 					"aws-waf-token=" + awsWafToken
@@ -396,58 +327,6 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			log(Level.DEBUG, "Response: " + response.getContent());
 			throw new ApplicationException("Holen der Kontodaten fehlgeschlagen");
 		}
-		
-//		
-//		
-//		awsWafToken = pwrt.awsWafToken;
-//		replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//		
-//		cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//				"JSESSIONID=" + sessId[0],
-//				"tr_session=" + tr_session[0],
-//				"tr_claims=" + tr_claims[0],
-//				"tr_device=" + tr_device[0],
-//				"tr_refresh=" + tr_refresh[0],
-//				"tr_external_id=" + tr_external_id[0],
-//				"aws-waf-token=" + awsWafToken
-//				));
-//		replaceArrayListEntry(headers, cookieHeaderEntry);
-//		
-//		
-//		
-//		response = doRequest(TRADEREP_ACCOUNT_URL, 
-//				HttpMethod.GET, headers, "application/json", 
-//				null);
-//		
-//		if (response.getHttpStatus() != 200) {
-//			// try with new AWS WAF token
-//			Thread.sleep(100);
-//
-//			// duplicate code above
-//			awsWafToken = pwrt.awsWafToken;
-//			replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//			cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//					"JSESSIONID=" + sessId[0],
-//					"tr_session=" + tr_session[0],
-//					"tr_claims=" + tr_claims[0],
-//					"tr_device=" + tr_device[0],
-//					"tr_refresh=" + tr_refresh[0],
-//					"tr_external_id=" + tr_external_id[0],
-//			
-//					"aws-waf-token=" + awsWafToken
-//					));
-//			replaceArrayListEntry(headers, cookieHeaderEntry);
-//			
-//			// retry account call
-//			response = doRequest(TRADEREP_ACCOUNT_URL, 
-//					HttpMethod.GET, headers, "application/json", 
-//					null);
-//			
-//			if (response.getHttpStatus() != 200) {
-//				log(Level.DEBUG, "Response: " + response.getContent());
-//				throw new ApplicationException("Holen der Kontodaten fehlgeschlagen");
-//			}
-//		}
 		
 		json = response.getJSONObject();
 		log(Level.DEBUG, "Account Response: " + json);
