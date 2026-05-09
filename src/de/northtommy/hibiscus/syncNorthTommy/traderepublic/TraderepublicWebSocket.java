@@ -164,189 +164,189 @@ public class TraderepublicWebSocket {
 
     @OnWebSocketMessage
     public void onMessage(String msg) {
-    	int sPC;
-    	
-    	// as websocket is async and any further responses may happen in background after error is already detected we need to drop msgs
-    	if ((errorException != null) || (rxState==RxState.FINISHED)) {
-    		return;
-    	}
-    	
-    	syncJobLogger.log(Level.DEBUG, "WebSocket Received message: " + msg);
-    	//var msgId = Integer.parseInt(msg.substring(0, msg.indexOf(" ")));
-    	//protoCounter = msgId + 1;
-        try {
-	        if ((msg.compareToIgnoreCase("connected") == 0) && (!this.protoConnected)) {
-	        	syncJobLogger.log(Level.DEBUG, "WebSocket subproto connected:");
-	        	this.protoConnected = true;
-	        	
-	        	// send initial transactions request and cash request
-	        	sPC = protoCounter++;
-	        	// remember sPC for response
-	        	protoAvailableCashSubscription = sPC;
-	        	String s = "sub " + sPC + " {\"type\":\"availableCash\"}";
-	        	syncJobLogger.log(Level.DEBUG, "WebSocket request avail chash info: " + s);
-	        	this.session.getRemote().sendString(s);
-	        	
-	        	sPC = protoCounter++;
-	        	// remember sPC for response
-	        	protoCashSubscription = sPC;
-	        	s = "sub " + sPC + " {\"type\":\"cash\"}";
-	        	syncJobLogger.log(Level.DEBUG, "WebSocket request chash info: " + s);
-	        	this.session.getRemote().sendString(s);
-	        	
-
-	        	sPC = protoCounter++;
-	    		protoTransactionSubscriptions.put(sPC, ProtoRequestStates.SUBSCRIBED);
-	    		s = "sub " + sPC + " {\"type\":\"timelineTransactions\"}";
-	    		syncJobLogger.log(Level.DEBUG, "WebSocket request first transactions: " + s);
-	        	this.session.getRemote().sendString(s);
-	        } else if (protoConnected) {
-	        	// check for all expected responses for outstanding requests
-	    		var msgId = Integer.parseInt(msg.substring(0, msg.indexOf(" ")));
-	    		// check if its response for transaction request
-	    		if (protoTransactionSubscriptions.containsKey(msgId)) {
-	    			var value = protoTransactionSubscriptions.get(msgId);
-	    			syncJobLogger.log(Level.DEBUG, "WebSocket transaction request msg response");
-	    			switch(value) {
-	    				case SUBSCRIBED:
+	    	int sPC;
+	    	
+	    	// as websocket is async and any further responses may happen in background after error is already detected we need to drop msgs
+	    	if ((errorException != null) || (rxState==RxState.FINISHED)) {
+	    		return;
+	    	}
+	    	
+	    	syncJobLogger.log(Level.DEBUG, "WebSocket Received message: " + msg);
+	    	//var msgId = Integer.parseInt(msg.substring(0, msg.indexOf(" ")));
+	    	//protoCounter = msgId + 1;
+	        try {
+		        if ((msg.compareToIgnoreCase("connected") == 0) && (!this.protoConnected)) {
+		        	syncJobLogger.log(Level.DEBUG, "WebSocket subproto connected:");
+		        	this.protoConnected = true;
+		        	
+		        	// send initial transactions request and cash request
+		        	sPC = protoCounter++;
+		        	// remember sPC for response
+		        	protoAvailableCashSubscription = sPC;
+		        	String s = "sub " + sPC + " {\"type\":\"availableCash\"}";
+		        	syncJobLogger.log(Level.DEBUG, "WebSocket request avail chash info: " + s);
+		        	this.session.getRemote().sendString(s);
+		        	
+		        	sPC = protoCounter++;
+		        	// remember sPC for response
+		        	protoCashSubscription = sPC;
+		        	s = "sub " + sPC + " {\"type\":\"cash\"}";
+		        	syncJobLogger.log(Level.DEBUG, "WebSocket request chash info: " + s);
+		        	this.session.getRemote().sendString(s);
+		        	
+	
+		        	sPC = protoCounter++;
+		    		protoTransactionSubscriptions.put(sPC, ProtoRequestStates.SUBSCRIBED);
+		    		s = "sub " + sPC + " {\"type\":\"timelineTransactions\"}";
+		    		syncJobLogger.log(Level.DEBUG, "WebSocket request first transactions: " + s);
+		        	this.session.getRemote().sendString(s);
+		        } else if (protoConnected) {
+		        	// check for all expected responses for outstanding requests
+		    		var msgId = Integer.parseInt(msg.substring(0, msg.indexOf(" ")));
+		    		// check if its response for transaction request
+		    		if (protoTransactionSubscriptions.containsKey(msgId)) {
+		    			var value = protoTransactionSubscriptions.get(msgId);
+		    			syncJobLogger.log(Level.DEBUG, "WebSocket transaction request msg response");
+		    			switch(value) {
+		    				case SUBSCRIBED:
+		    					// if "id A JSON" -> analyse array 
+		    					Date lastTransactionDate = null;
+		    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+		    						JSONObject json = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
+		    						JSONArray jsonTransactions = json.getJSONArray("items");
+		    						JSONObject jsonCursors = json.getJSONObject("cursors");
+		    						
+		    						for (int i = 0; i < jsonTransactions.length(); i++) {
+		    							var jsonTransaction = jsonTransactions.getJSONObject(i);
+		    							var tr = new Transaction();
+		        						tr.transaction = jsonTransaction;
+		        						tr.details = null;
+		        						accountTransactions.add(tr);
+		        						// Details do not contain any structured non-visual content :-(
+		        						//String action = jsonTransaction.optString("action");
+		        						// received action seems to have an unsupported subscription type ("errorCode":"BAD_SUBSCRIPTION_TYPE") -> timelineDetail does not work fine
+		        						//if (!action.isBlank()) {
+		        							//sPC = protoCounter++;
+		        							//protoTransactionDetailSubscriptions.put(sPC, tr);
+		        							//String s = "sub " + sPC + " {\"type\":\"timelineDetailV2\", \"id\":\"" + jsonTransaction.getString("id") + "\"}";
+		        							//String s = "sub " + sPC + " " + action;
+		        							//syncJob.logging(Level.DEBUG, "WebSocket request transactions details: " + s);
+		        							//this.session.getRemote().sendString(s);
+		        						//}
+		        			        	
+		        			        	// remember date of the transaction
+		        						lastTransactionDate = dateFormat.parse(jsonTransaction.getString("timestamp"));
+		    						}
+		    						
+		    						if ( lastTransactionDate != null) {
+		    							syncJobLogger.log(Level.DEBUG, "WebSocket received transactions until " + lastTransactionDate.toLocaleString() + "( > " + rxDateRangeUntil + ")");
+		    						}
+		    						// check cursors (more avail if after cursor is set) and if we need to request further transactions
+		    						var afterCursor = jsonCursors.optString("after");
+		    						// check if there is a further cursor AND 
+		    						// if no transactions at all received (empty array), lastTransactionDate is null -> also break AND
+		    						// last check if either until Date == null -> rx all as much possible OR lasttransactionDate is still newer than until-Date
+		    						if ( (! afterCursor.isBlank()) && (lastTransactionDate != null) && ( (this.rxDateRangeUntil == null) || (lastTransactionDate.after(this.rxDateRangeUntil))) ) {
+		    							protoTransactionSubscriptions.put(Integer.valueOf(protoCounter), ProtoRequestStates.SUBSCRIBED);
+		    							String s = "sub " + this.protoCounter++ + " {\"type\":\"timelineTransactions\", \"after\":\"" + afterCursor + "\"}";
+										syncJobLogger.log(Level.DEBUG, "WebSocket request further transactions: " + s);
+		    							this.session.getRemote().sendString(s);
+		    						} else {
+		    							syncJobLogger.log(Level.INFO, "Ums\u00E4tze abgerufen.");
+		    							this.rxState = RxState.WAIT_REMAINING_SUBS;
+		    						}
+		    						// we only expect A in this case
+			    					
+			    					protoTransactionSubscriptions.put(msgId, ProtoRequestStates.ANSWERED);
+		    					} else {
+		    						// includes <msgId> E ....
+		    						throw new ApplicationException("Fehler beim Abrufen der Umsätze: " + msg);
+		    					}
+		    					break;
+		    				case ANSWERED:
+		    					// if C -> unsub and remove from subscriptionArray
+		    					// if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+		    					String s = "unsub " + msgId;
+		    		    		syncJobLogger.log(Level.DEBUG, "WebSocket transaction request finished: " + s);
+		    					session.getRemote().sendString(s);
+		    					protoTransactionSubscriptions.remove(msgId);
+		    					break;
+							default:
+								// not an answer for transaction request
+								break;
+		    			}
+		    		} // Transactions request pendig for the msgId
+		    		else if (protoTransactionDetailSubscriptions.containsKey(msgId)) {
+		    			// response for transaction detail request
+		    			var valueDetails = protoTransactionDetailSubscriptions.get(msgId);
+	    				syncJobLogger.log(Level.DEBUG, "WebSocket transaction detail request msg response");
+	    				if (valueDetails.details == null) {
+	    					// still no details received - add them from msg
 	    					// if "id A JSON" -> analyse array 
-	    					Date lastTransactionDate = null;
 	    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
 	    						JSONObject json = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
-	    						JSONArray jsonTransactions = json.getJSONArray("items");
-	    						JSONObject jsonCursors = json.getJSONObject("cursors");
-	    						
-	    						for (int i = 0; i < jsonTransactions.length(); i++) {
-	    							var jsonTransaction = jsonTransactions.getJSONObject(i);
-	    							var tr = new Transaction();
-	        						tr.transaction = jsonTransaction;
-	        						tr.details = null;
-	        						accountTransactions.add(tr);
-	        						// Details do not contain any structured non-visual content :-(
-	        						//String action = jsonTransaction.optString("action");
-	        						// received action seems to have an unsupported subscription type ("errorCode":"BAD_SUBSCRIPTION_TYPE") -> timelineDetail does not work fine
-	        						//if (!action.isBlank()) {
-	        							//sPC = protoCounter++;
-	        							//protoTransactionDetailSubscriptions.put(sPC, tr);
-	        							//String s = "sub " + sPC + " {\"type\":\"timelineDetailV2\", \"id\":\"" + jsonTransaction.getString("id") + "\"}";
-	        							//String s = "sub " + sPC + " " + action;
-	        							//syncJob.logging(Level.DEBUG, "WebSocket request transactions details: " + s);
-	        							//this.session.getRemote().sendString(s);
-	        						//}
-	        			        	
-	        			        	// remember date of the transaction
-	        						lastTransactionDate = dateFormat.parse(jsonTransaction.getString("timestamp"));
-	    						}
-	    						
-	    						if ( lastTransactionDate != null) {
-	    							syncJobLogger.log(Level.DEBUG, "WebSocket received transactions until " + lastTransactionDate.toLocaleString() + "( > " + rxDateRangeUntil + ")");
-	    						}
-	    						// check cursors (more avail if after cursor is set) and if we need to request further transactions
-	    						var afterCursor = jsonCursors.optString("after");
-	    						// check if there is a further cursor AND 
-	    						// if no transactions at all received (empty array), lastTransactionDate is null -> also break AND
-	    						// last check if either until Date == null -> rx all as much possible OR lasttransactionDate is still newer than until-Date
-	    						if ( (! afterCursor.isBlank()) && (lastTransactionDate != null) && ( (this.rxDateRangeUntil == null) || (lastTransactionDate.after(this.rxDateRangeUntil))) ) {
-	    							protoTransactionSubscriptions.put(Integer.valueOf(protoCounter), ProtoRequestStates.SUBSCRIBED);
-	    							String s = "sub " + this.protoCounter++ + " {\"type\":\"timelineTransactions\", \"after\":\"" + afterCursor + "\"}";
-									syncJobLogger.log(Level.DEBUG, "WebSocket request further transactions: " + s);
-	    							this.session.getRemote().sendString(s);
-	    						} else {
-	    							syncJobLogger.log(Level.INFO, "Ums\u00E4tze abgerufen.");
-	    							this.rxState = RxState.WAIT_REMAINING_SUBS;
-	    						}
-	    						// we only expect A in this case
-		    					
-		    					protoTransactionSubscriptions.put(msgId, ProtoRequestStates.ANSWERED);
+	    						valueDetails.details = json;
 	    					} else {
 	    						// includes <msgId> E ....
-	    						throw new ApplicationException("Fehler beim Abrufen der Umsätze: " + msg);
+	    						throw new ApplicationException("Fehler beim Abrufen der UmsatzDetails: " + msg);
 	    					}
-	    					break;
-	    				case ANSWERED:
-	    					// if C -> unsub and remove from subscriptionArray
-	    					// if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+	    				} else {
+	    					// details already received
+	    					// if (msg.charAt(msg.indexOf(" ") + 1) == 'C') {
 	    					String s = "unsub " + msgId;
-	    		    		syncJobLogger.log(Level.DEBUG, "WebSocket transaction request finished: " + s);
+	    		    		syncJobLogger.log(Level.DEBUG, "WebSocket transaction detail request finished: " + s);
 	    					session.getRemote().sendString(s);
-	    					protoTransactionSubscriptions.remove(msgId);
-	    					break;
-						default:
-							// not an answer for transaction request
-							break;
-	    			}
-	    		} // Transactions request pendig for the msgId
-	    		else if (protoTransactionDetailSubscriptions.containsKey(msgId)) {
-	    			// response for transaction detail request
-	    			var valueDetails = protoTransactionDetailSubscriptions.get(msgId);
-    				syncJobLogger.log(Level.DEBUG, "WebSocket transaction detail request msg response");
-    				if (valueDetails.details == null) {
-    					// still no details received - add them from msg
-    					// if "id A JSON" -> analyse array 
-    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
-    						JSONObject json = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
-    						valueDetails.details = json;
-    					} else {
-    						// includes <msgId> E ....
-    						throw new ApplicationException("Fehler beim Abrufen der UmsatzDetails: " + msg);
-    					}
-    				} else {
-    					// details already received
-    					// if (msg.charAt(msg.indexOf(" ") + 1) == 'C') {
-    					String s = "unsub " + msgId;
-    		    		syncJobLogger.log(Level.DEBUG, "WebSocket transaction detail request finished: " + s);
-    					session.getRemote().sendString(s);
-    					protoTransactionDetailSubscriptions.remove(msgId);
-    				}
-	    		} // transaction details request pending for the msgId
-	    		else if (protoCashSubscription == msgId) {
-	    			if (accountsCash == null) {
-    					// still no accounts - add them from msg
-    					// if "id A JSON" -> analyse array 
-    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
-    						syncJobLogger.log(Level.DEBUG, "WebSocket got account cash");
-    						JSONArray json = new JSONArray(msg.substring(msg.indexOf(" ") + 3));
-    						accountsCash = json;
-    						
-    						String s = "unsub " + msgId;
-        		    		syncJobLogger.log(Level.DEBUG, "WebSocket getting account cash finished: " + s);
-        					session.getRemote().sendString(s);
-        					protoTransactionDetailSubscriptions.remove(msgId);
-        					protoCashSubscription = 0;
-    					} else {
-    						// includes <msgId> E ....
-    						throw new ApplicationException("Fehler beim Abrufen des Saldo: " + msg);
-    					}
-	    			}
-	    		}
-	    		else if (protoAvailableCashSubscription == msgId) {
-	    			if (accountsAvailableCash == null) {
-    					// still no accounts - add them from msg
-    					// if "id A JSON" -> analyse array 
-    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
-    						syncJobLogger.log(Level.DEBUG, "WebSocket got account available cash");
-    						JSONArray json = new JSONArray(msg.substring(msg.indexOf(" ") + 3));
-    						accountsAvailableCash = json;
-    						
-    						String s = "unsub " + msgId;
-        		    		syncJobLogger.log(Level.DEBUG, "WebSocket getting account available cash finished: " + s);
-        					session.getRemote().sendString(s);
-        					protoTransactionDetailSubscriptions.remove(msgId);
-        					protoAvailableCashSubscription = 0;
-    					} else {
-    						// includes <msgId> E ....
-    						throw new ApplicationException("Fehler beim Abrufen des verfügbaren Saldo: " + msg);
-    					}
-	    			}
-	    		} else {
-	    			// ignore msg - not subscribed
-	    		}
-	        }
-        } catch (Exception e) {
-    		syncJobLogger.log(Level.ERROR, "WebSocket error parsing rx message: " + e.getMessage());
-    		this.errorException = e;
-    		rxState = RxState.FINISHED;
-    	}
+	    					protoTransactionDetailSubscriptions.remove(msgId);
+	    				}
+		    		} // transaction details request pending for the msgId
+		    		else if (protoCashSubscription == msgId) {
+		    			if (accountsCash == null) {
+	    					// still no accounts - add them from msg
+	    					// if "id A JSON" -> analyse array 
+	    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+	    						syncJobLogger.log(Level.DEBUG, "WebSocket got account cash");
+	    						JSONArray json = new JSONArray(msg.substring(msg.indexOf(" ") + 3));
+	    						accountsCash = json;
+	    						
+	    						String s = "unsub " + msgId;
+	        		    		syncJobLogger.log(Level.DEBUG, "WebSocket getting account cash finished: " + s);
+	        					session.getRemote().sendString(s);
+	        					protoTransactionDetailSubscriptions.remove(msgId);
+	        					protoCashSubscription = 0;
+	    					} else {
+	    						// includes <msgId> E ....
+	    						throw new ApplicationException("Fehler beim Abrufen des Saldo: " + msg);
+	    					}
+		    			}
+		    		}
+		    		else if (protoAvailableCashSubscription == msgId) {
+		    			if (accountsAvailableCash == null) {
+	    					// still no accounts - add them from msg
+	    					// if "id A JSON" -> analyse array 
+	    					if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
+	    						syncJobLogger.log(Level.DEBUG, "WebSocket got account available cash");
+	    						JSONArray json = new JSONArray(msg.substring(msg.indexOf(" ") + 3));
+	    						accountsAvailableCash = json;
+	    						
+	    						String s = "unsub " + msgId;
+	        		    		syncJobLogger.log(Level.DEBUG, "WebSocket getting account available cash finished: " + s);
+	        					session.getRemote().sendString(s);
+	        					protoTransactionDetailSubscriptions.remove(msgId);
+	        					protoAvailableCashSubscription = 0;
+	    					} else {
+	    						// includes <msgId> E ....
+	    						throw new ApplicationException("Fehler beim Abrufen des verfügbaren Saldo: " + msg);
+	    					}
+		    			}
+		    		} else {
+		    			// ignore msg - not subscribed
+		    		}
+		        }
+	        } catch (Exception e) {
+	    		syncJobLogger.log(Level.ERROR, "WebSocket error parsing rx message: " + e.getMessage());
+	    		this.errorException = e;
+	    		rxState = RxState.FINISHED;
+	    	}
         if ( (rxState == RxState.WAIT_REMAINING_SUBS) && 
         	(protoTransactionSubscriptions.isEmpty()) &&
         	(protoTransactionDetailSubscriptions.isEmpty()) &&

@@ -4,34 +4,16 @@ package de.northtommy.hibiscus.syncNorthTommy.traderepublic;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 
-import java.io.File;
-import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Path;
-import java.rmi.RemoteException;
 import java.util.concurrent.TimeUnit;
-
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.websocket.api.Session;
-import org.eclipse.jetty.websocket.api.annotations.*;
-
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.GregorianCalendar;
-import java.util.List;
-import java.util.Map;
-import java.util.TimeZone;
-import java.util.UUID;
-
 import javax.annotation.Resource;
 
 import org.htmlunit.HttpMethod;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import de.northtommy.hibiscus.syncNorthTommy.KeyValue;
@@ -40,8 +22,6 @@ import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJobKontoauszug;
 import de.northtommy.hibiscus.syncNorthTommy.SyncNTSynchronizeJobKontoauszugLoggerI;
 import de.northtommy.hibiscus.syncNorthTommy.WebResult;
 import de.northtommy.hibiscus.syncNorthTommy.traderepublic.TraderepublicWebSocket.RxState;
-import de.northtommy.hibiscus.syncNorthTommy.PlayWrightRunnerThread;
-
 import de.willuhn.datasource.rmi.DBIterator;
 import de.willuhn.jameica.hbci.Settings;
 import de.willuhn.jameica.hbci.messaging.ObjectChangedMessage;
@@ -52,30 +32,13 @@ import de.willuhn.jameica.hbci.rmi.Umsatz;
 import de.willuhn.jameica.hbci.synchronize.SynchronizeBackend;
 import de.willuhn.jameica.system.Application;
 import de.willuhn.logging.Level;
-import de.willuhn.logging.Logger;
 import de.willuhn.util.ApplicationException;
-
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.Browser.NewContextOptions;
-import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.Playwright;
-import com.microsoft.playwright.Page.ScreenshotOptions;
-import com.microsoft.playwright.Route.FulfillOptions;
-import com.microsoft.playwright.options.ScreenshotAnimations;
-import com.microsoft.playwright.options.ScreenshotType;
-import io.github.kihdev.playwright.stealth4j.Stealth4j;
-import io.github.kihdev.playwright.stealth4j.Stealth4jConfig;
 
 // Spezifisch, eigentliche Implementierung
 
 public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKontoauszug implements SyncNTSynchronizeJob , SyncNTSynchronizeJobKontoauszugLoggerI
 {
 
-	//private static final String TRADEREP_PLAYWRIGTH_HOME = "https://traderepublic.com/";
-	private static final String TRADEREP_PLAYWRIGTH_LOGIN = "https://app.traderepublic.com/login";
-	
-	private static final String TRADEREP_LOGIN_URL = "https://api.traderepublic.com/api/v2/auth/web/login";
-	private static final String TRADEREP_LOGIN_PROGRESS_URL = "https://api.traderepublic.com/api/v2/auth/web/login/processes";
 	private static final String TRADEREP_ACCOUNT_URL = "https://api.traderepublic.com/api/v2/auth/account";
 	private static final String TRADEREP_WSS_URL = "wss://api.traderepublic.com/";
 	private static final String TRADEREP_LOGOUT_URL = "https://api.traderepublic.com/api/v1/auth/web/logout";
@@ -100,25 +63,41 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		boolean headlessBrowser = "true".equals(konto.getMeta(TraderepublicSynchronizeBackend.META_NOTHEADLESS, "true"));
 		String firefoxPath = konto.getMeta(TraderepublicSynchronizeBackend.META_FIREFOXPATH,  null);
 		
-		this.pwrt = new PlayWrightRunnerThread(this, firefoxPath, headlessBrowser, webClient, TRADEREP_PLAYWRIGTH_LOGIN);
+		this.pwrt = new PlayWrightRunnerThread(this, firefoxPath, headlessBrowser, webClient, user, passwort);
 
 		ArrayList<KeyValue<String, String>> headers = new ArrayList<>();
 		
 		log(Level.INFO, "Warte auf AWS WAF token vom Browser");
 		this.pwrt.start();
+		
 		// waiting playwright tread got a first token
 		int pwrtTimeout = 120; /* times 1s -> 2min */
-		while (pwrt.isAlive() && (pwrt.awsWafToken == null) && (pwrtTimeout-- > 0)) {
+		while (pwrt.isAlive() && 
+				(
+					(pwrt.awsWafToken == null) || 
+					(pwrt.sessId == null) ||
+					(pwrt.tr_claims == null) ||
+					(pwrt.tr_device == null) ||
+					(pwrt.tr_external_id == null) ||
+					(pwrt.tr_refresh == null) ||
+					(pwrt.tr_session == null) 
+				) &&
+				(pwrtTimeout-- > 0)) {
 			Thread.sleep(1000);
 			log(Level.INFO, ".");
+			if (pwrt.notifyUserConfirm) {
+				var requestText = "Bitte bestaetige den Login mittels der Traderepublic App";
+				Application.getCallback().notifyUser(requestText);
+				pwrt.notifyUserConfirm = false;
+			}
 		}
 		if (!pwrt.isAlive()) {
 			log(Level.WARN, "unable to start playwright with background browser");
 			throw new ApplicationException("Fehler beim Starten von Playwright fuer AWS WAF token");
 		}
-		if (pwrt.awsWafToken == null) {
-			log(Level.WARN, "got no AWS WAF token in time");
-			throw new ApplicationException("Zeitueberschreitung AWS WAF token");
+		if (pwrtTimeout <= 0) {
+			log(Level.WARN, "got no AWS WAF token or login confirmation in time");
+			throw new ApplicationException("Zeitueberschreitung AWS WAF token oder Login-Bestaetigung");
 		}
 		
 		// got the AWS key maybe within unstable time at beginning (update interval 100ms, 200ms, 300ms, 500ms, 800ms, 1000ms)
@@ -126,188 +105,194 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		// to move our retries to a stable key update interval, we wait a moment here
 		// -> retry delay for a command becomes less than the key update interval
 		Thread.sleep(1000);
-		
-		// add default headers for any communication
-		headers.add(new KeyValue<String, String>("Accept", "*/*"));
-		headers.add(new KeyValue<String, String>("Accept-Language", "en"));
-		headers.add(new KeyValue<String, String>("Accept-Encoding", "gzip, deflate, br, zstd"));
-		headers.add(new KeyValue<String, String>("Cache-Control", "no-cache"));
-		headers.add(new KeyValue<String, String>("Origin", "https://app.traderepublic.com"));
-		headers.add(new KeyValue<String, String>("Pragma", "no-cache"));
-		headers.add(new KeyValue<String, String>("Priority", "u=1, i"));
-		headers.add(new KeyValue<String, String>("sec-ch-ua", "\"Mozilla\";v=\"50\""));
-		headers.add(new KeyValue<String, String>("sec-ch-ua-mobile", "?0"));
-		headers.add(new KeyValue<String, String>("sec-ch-ua-platform", "Windows"));
-		headers.add(new KeyValue<String, String>("Sec-Fetch-Dest", "empty"));
-		headers.add(new KeyValue<String, String>("Sec-Fetch-Mode", "cors"));
-		headers.add(new KeyValue<String, String>("Sec-Fetch-Site", "same-site"));
-		headers.add(new KeyValue<String, String>("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"));
-		headers.add(new KeyValue<String, String>("X-TR-Platform", "web"));
-		headers.add(new KeyValue<String, String>("X-TR-App-Version", "15.7.0"));
-		headers.add(new KeyValue<String, String>("X-TR-Device-Info", 
-		  "{\"stableDeviceId\": \"99755ee9fb0d9c5d2129da09f6aa40394d21505b0b0d99b011dc937b03f3341f2e17da45d32e8646cda1bb6f13771275e46cc82f95d736f9e43e0aaabaadbc733\"," +
-		  "\"browser\": \"Mozilla\", \"browserVersion\": \"5.0\", \"os\": \"Windows\","+
-		  "\"osVersion\": \"10\", \"timezone\": \"Europe/Berlin\", \"timezoneOffset\": -120,"+
-		  "\"screen\": \"2560x1440x32\"," +
-		  "\"preferredLanguages\": [ \"en\", \"de-DE\", \"de\", \"en-US\" ],"+
-		  "\"numberOfCores\": 12, \"deviceMemory\": 32 } "));
-		
-		// Perform Login getting sessionID and trigger app login confirmation request...
-		
-		trialCount = 0;
-		response = null;
-		do {
-			log(Level.DEBUG, "(re-)try login Step 1");
-			
-			String awsWafToken = pwrt.awsWafToken;
-			replaceOrAddArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-			var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-					"aws-waf-token=" + awsWafToken,
-					"i18n_redirected=en",
-					"tr_appearance=Light"
-					));
-			replaceOrAddArrayListEntry(headers, cookieHeaderEntry);
-			
-			response = doRequest(TRADEREP_LOGIN_URL, HttpMethod.POST, headers, "application/json", 
-					"{\"phoneNumber\":\"" + user + "\",\"pin\":\"" + passwort + "\"}");
-			
-			trialCount++;
-			if (response.getHttpStatus() != 200) {
-				// try with new AWS WAF token after a moment
-				Thread.sleep(300);
-			}
-		} while ((response.getHttpStatus() != 200) && (trialCount < 3));
-		
-		if (response.getHttpStatus() != 200) {
-			log(Level.DEBUG, "login Step 1 response: " + response.getContent());
-			throw new ApplicationException("Login Step 1 fehlgeschlagen");
-		}
-		
-			
-		var json = response.getJSONObject();
-		log(Level.DEBUG, "Login step 1 response: " + json);
-		// processId needed for URL for sending SMS-TAN
-		String processId = json.getString("processId");
-		// sessionId needed for cookie when sending SMS-TAN
-		String sessId[] = {""};
-		String tr_device[] = {""};
-		response.getResponseHeader().forEach(nvp -> {
-			log(Level.DEBUG, "Login Step 1 header: " + nvp.getName() + ": " + nvp.getValue());
-			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
-				var val = nvp.getValue();
-				String[] vals = val.split(";");
-				for (String v : vals) {
-					if (v.startsWith("JSESSIONID")) {
-						sessId[0] = v.substring(val.indexOf("JSESSIONID=") + 11);
-					}
-					if (v.startsWith("tr_device")) {
-						tr_device[0] = v.substring(val.indexOf("tr_device=") + 10);
-					}
-				}
-			}
-		});
-		log(Level.DEBUG, "Login Step 1 JSESSIONID: " + sessId[0]);
-		log(Level.DEBUG, "Login Step 1 tr_device: " + tr_device[0]);
-		log(Level.DEBUG, "Login Step 1 processId: " + processId);
-		
-		
-		
-		var requestText = "Bitte bestätige den Login mittels der Traderepublic App";
-		Application.getCallback().notifyUser(requestText);
-		
-		// polling for login process
-		
-		
-		String loginStatus = null;
-		do {
-			Thread.sleep(2500);	// this is the time the webpage is waiting between polling calls
-			
-			trialCount = 0;
-			response = null;
-			do {
-				log(Level.DEBUG, "(re-)try polling for login status");
-				
-				String awsWafToken = pwrt.awsWafToken;
-				replaceOrAddArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-				var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-						"JSESSIONID=" + sessId[0],
-						"tr_device=" + tr_device[0],
-						"aws-waf-token=" + awsWafToken
-						));
-				replaceOrAddArrayListEntry(headers, cookieHeaderEntry);
-				
-				response = doRequest(TRADEREP_LOGIN_PROGRESS_URL + "/"+ processId, 
-						HttpMethod.GET, headers, "application/json", 
-						null);
-				
-				trialCount++;
-				if (response.getHttpStatus() != 200) {
-					// try with new AWS WAF token after a moment
-					Thread.sleep(300);
-				}
-			} while ((response.getHttpStatus() != 200) && (trialCount < 3));
-			
-			if (response.getHttpStatus() != 200) {
-				log(Level.DEBUG, "Login polling response: " + response.getContent());
-				throw new ApplicationException("Login status polling fehlgeschlagen");
-			}
-			
-			log(Level.DEBUG, "Login polling response: " + response.getContent());
-			
-			json = response.getJSONObject();
-			loginStatus = json.getString("status");
-			
-		} while (loginStatus.compareToIgnoreCase("PENDING") == 0);
-		
-		if (loginStatus.compareToIgnoreCase("CONFIRMED") != 0) {
-			log(Level.DEBUG, "Login polling result: " + loginStatus);
-			throw new ApplicationException("Login nicht per App bestaetigt");
-		}
-		
-		log(Level.INFO, "Login per App bestaetigt");
-		
-		// with last polling status call we got further data
-		
-		// seddId is reused and updated
-		String tr_session[] = {""};
-		String tr_claims[] = {""};
-		String tr_external_id[] = {""};
-		String tr_refresh[] = {""};
-		
-		response.getResponseHeader().forEach(nvp -> {
-			log(Level.DEBUG, "Login polling header: " + nvp.getName() + ": " + nvp.getValue());
-			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
-				var val = nvp.getValue();
-				String[] vals = val.split(";");
-				for (String v : vals) {
-					if (v.startsWith("JSESSIONID")) {
-						sessId[0] = v.substring(val.indexOf("JSESSIONID=") + 11);
-					}
-					if (v.startsWith("tr_session")) {
-						tr_session[0] = v.substring(val.indexOf("tr_session=") + 11);
-					}
-					if (v.startsWith("tr_claims")) {
-						tr_claims[0] = v.substring(val.indexOf("tr_claims=") + 10);
-					}
-					if (v.startsWith("tr_refresh")) {
-						tr_refresh[0] = v.substring(val.indexOf("tr_refresh=") + 11);
-					}
-					if (v.startsWith("tr_device")) {
-						tr_device[0] = v.substring(val.indexOf("tr_device=") + 11);
-					}
-					if (v.startsWith("tr_external_id")) {
-						tr_external_id[0] = v.substring(val.indexOf("tr_external_id=") + 15);
-					}
-				}
-			}
-		});
-		
-		log(Level.DEBUG, "Login polling JSESSIONID: " + sessId[0]);
-		log(Level.DEBUG, "Login polling tr_session: " + tr_session[0]);
-		log(Level.DEBUG, "Login polling tr_claims: " + tr_claims[0]);
-		log(Level.DEBUG, "Login polling tr_refresh: " + tr_refresh[0]);
-		log(Level.DEBUG, "Login polling tr_device: " + tr_device[0]);
-		log(Level.DEBUG, "Login polling tr_external_id: " + tr_external_id[0]);
+//		
+//		// add default headers for any communication
+//		headers.add(new KeyValue<String, String>("Accept", "*/*"));
+//		headers.add(new KeyValue<String, String>("Accept-Language", "en"));
+//		headers.add(new KeyValue<String, String>("Accept-Encoding", "gzip, deflate, br, zstd"));
+//		headers.add(new KeyValue<String, String>("Cache-Control", "no-cache"));
+//		headers.add(new KeyValue<String, String>("DNT", "1"));
+//		headers.add(new KeyValue<String, String>("Host", "api.traderepublic.com"));
+//		headers.add(new KeyValue<String, String>("Origin", "https://app.traderepublic.com"));
+//		headers.add(new KeyValue<String, String>("Pragma", "no-cache"));
+//		headers.add(new KeyValue<String, String>("Priority", "u=1, i"));
+//		//headers.add(new KeyValue<String, String>("sec-ch-ua", "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\""));
+//		//headers.add(new KeyValue<String, String>("sec-ch-ua-mobile", "?0"));
+//		//headers.add(new KeyValue<String, String>("sec-ch-ua-platform", "Windows"));
+//		headers.add(new KeyValue<String, String>("Sec-Fetch-Dest", "empty"));
+//		headers.add(new KeyValue<String, String>("Sec-Fetch-Mode", "cors"));
+//		headers.add(new KeyValue<String, String>("Sec-Fetch-Site", "same-site"));
+//		headers.add(new KeyValue<String, String>("Sec-GPC", "1"));
+//		headers.add(new KeyValue<String, String>("TE", "trailers"));
+//		headers.add(new KeyValue<String, String>("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0"));
+//		headers.add(new KeyValue<String, String>("X-TR-Platform", "web"));
+//		headers.add(new KeyValue<String, String>("X-TR-App-Version", "15.7.0"));
+//		headers.add(new KeyValue<String, String>("X-TR-Device-Info", 
+//		  "{\"stableDeviceId\": \"80851f0d931e72776cac5d81a610d50ec0916a1646855e7fb60720142f0a64db226f7842b68e2fdb16627335b99722460dae3097571dc5a9c8a3c4f3efe11e4b\"," +
+//		  "\"browser\": \"Firefox\", \"browserVersion\": \"144.0\", \"os\": \"Windows\","+
+//		  "\"osVersion\": \"10\", \"timezone\": \"Europe/Berlin\", \"timezoneOffset\": -120,"+
+//		  "\"screen\": \"2560x1440x32\"," +
+//		  "\"preferredLanguages\": [ \"en\", \"de-DE\", \"de\", \"en-US\" ],"+
+//		  "\"numberOfCores\": 8 } "));
+//		
+//		// Perform Login getting sessionID and trigger app login confirmation request...
+//		
+//		
+//while (Thread.currentThread().isAlive()) { Thread.sleep(1000); 
+//	log(Level.INFO, "#");}
+//		trialCount = 0;
+//		response = null;
+//		do {
+//			log(Level.DEBUG, "(re-)try login Step 1");
+//			
+//			String awsWafToken = pwrt.awsWafToken;
+//			replaceOrAddArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
+//			var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
+//					"aws-waf-token=" + awsWafToken,
+//					"i18n_redirected=en",
+//					"tr_appearance=Light"
+//					));
+//			replaceOrAddArrayListEntry(headers, cookieHeaderEntry);
+//			
+//			response = doRequest(TRADEREP_LOGIN_URL, HttpMethod.POST, headers, "application/json", 
+//					"{\"phoneNumber\":\"" + user + "\",\"pin\":\"" + passwort + "\"}");
+//			
+//			trialCount++;
+//			if (response.getHttpStatus() != 200) {
+//				// try with new AWS WAF token after a moment
+//				Thread.sleep(300);
+//			}
+//		} while ((response.getHttpStatus() != 200) && (trialCount < 3));
+//		
+//		if (response.getHttpStatus() != 200) {
+//			log(Level.DEBUG, "login Step 1 response: " + response.getContent());
+//			throw new ApplicationException("Login Step 1 fehlgeschlagen");
+//		}
+//		
+//			
+//		var json = response.getJSONObject();
+//		log(Level.DEBUG, "Login step 1 response: " + json);
+//		// processId needed for URL for sending SMS-TAN
+//		String processId = json.getString("processId");
+//		// sessionId needed for cookie when sending SMS-TAN
+//		String sessId[] = {""};
+//		String tr_device[] = {""};
+//		response.getResponseHeader().forEach(nvp -> {
+//			log(Level.DEBUG, "Login Step 1 header: " + nvp.getName() + ": " + nvp.getValue());
+//			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
+//				var val = nvp.getValue();
+//				String[] vals = val.split(";");
+//				for (String v : vals) {
+//					if (v.startsWith("JSESSIONID")) {
+//						sessId[0] = v.substring(val.indexOf("JSESSIONID=") + 11);
+//					}
+//					if (v.startsWith("tr_device")) {
+//						tr_device[0] = v.substring(val.indexOf("tr_device=") + 10);
+//					}
+//				}
+//			}
+//		});
+//		log(Level.DEBUG, "Login Step 1 JSESSIONID: " + sessId[0]);
+//		log(Level.DEBUG, "Login Step 1 tr_device: " + tr_device[0]);
+//		log(Level.DEBUG, "Login Step 1 processId: " + processId);
+//		
+//		
+//		
+//		
+//		
+//		// polling for login process
+//		
+//		
+//		String loginStatus = null;
+//		do {
+//			Thread.sleep(2500);	// this is the time the webpage is waiting between polling calls
+//			
+//			trialCount = 0;
+//			response = null;
+//			do {
+//				log(Level.DEBUG, "(re-)try polling for login status");
+//				
+//				String awsWafToken = pwrt.awsWafToken;
+//				replaceOrAddArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
+//				var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
+//						"JSESSIONID=" + sessId[0],
+//						tr_device[0].isBlank() ? null : "tr_device=" + tr_device[0],
+//						"aws-waf-token=" + awsWafToken
+//						));
+//				replaceOrAddArrayListEntry(headers, cookieHeaderEntry);
+//				
+//				response = doRequest(TRADEREP_LOGIN_PROGRESS_URL + "/"+ processId, 
+//						HttpMethod.GET, headers, "application/json", 
+//						null);
+//				
+//				trialCount++;
+//				if (response.getHttpStatus() != 200) {
+//					// try with new AWS WAF token after a moment
+//					Thread.sleep(300);
+//				}
+//			} while ((response.getHttpStatus() != 200) && (trialCount < 3));
+//			
+//			if (response.getHttpStatus() != 200) {
+//				log(Level.DEBUG, "Login polling response: " + response.getContent());
+//				throw new ApplicationException("Login status polling fehlgeschlagen");
+//			}
+//			
+//			log(Level.DEBUG, "Login polling response: " + response.getContent());
+//			
+//			json = response.getJSONObject();
+//			loginStatus = json.getString("status");
+//			
+//		} while (loginStatus.compareToIgnoreCase("PENDING") == 0);
+//		
+//		if (loginStatus.compareToIgnoreCase("CONFIRMED") != 0) {
+//			log(Level.DEBUG, "Login polling result: " + loginStatus);
+//			throw new ApplicationException("Login nicht per App bestaetigt");
+//		}
+//		
+//		log(Level.INFO, "Login per App bestaetigt");
+//		
+//		// with last polling status call we got further data
+//		
+//		// seddId is reused and updated
+//		String tr_session[] = {""};
+//		String tr_claims[] = {""};
+//		String tr_external_id[] = {""};
+//		String tr_refresh[] = {""};
+//		
+//		response.getResponseHeader().forEach(nvp -> {
+//			log(Level.DEBUG, "Login polling header: " + nvp.getName() + ": " + nvp.getValue());
+//			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
+//				var val = nvp.getValue();
+//				String[] vals = val.split(";");
+//				for (String v : vals) {
+//					if (v.startsWith("JSESSIONID")) {
+//						sessId[0] = v.substring(val.indexOf("JSESSIONID=") + 11);
+//					}
+//					if (v.startsWith("tr_session")) {
+//						tr_session[0] = v.substring(val.indexOf("tr_session=") + 11);
+//					}
+//					if (v.startsWith("tr_claims")) {
+//						tr_claims[0] = v.substring(val.indexOf("tr_claims=") + 10);
+//					}
+//					if (v.startsWith("tr_refresh")) {
+//						tr_refresh[0] = v.substring(val.indexOf("tr_refresh=") + 11);
+//					}
+//					if (v.startsWith("tr_device")) {
+//						tr_device[0] = v.substring(val.indexOf("tr_device=") + 11);
+//					}
+//					if (v.startsWith("tr_external_id")) {
+//						tr_external_id[0] = v.substring(val.indexOf("tr_external_id=") + 15);
+//					}
+//				}
+//			}
+//		});
+//		
+		log(Level.DEBUG, "Login polling JSESSIONID: " + pwrt.sessId);
+		log(Level.DEBUG, "Login polling tr_session: " + pwrt.tr_session);
+		log(Level.DEBUG, "Login polling tr_claims: " + pwrt.tr_claims);
+		log(Level.DEBUG, "Login polling tr_refresh: " + pwrt.tr_refresh);
+		log(Level.DEBUG, "Login polling tr_device: " + pwrt.tr_device);
+		log(Level.DEBUG, "Login polling tr_external_id: " + pwrt.tr_external_id);
 		
 		updatePercentComplete(5);
 		log(Level.INFO, "Login erfolgreich.");
@@ -324,12 +309,12 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			String awsWafToken = pwrt.awsWafToken;
 			replaceOrAddArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
 			var cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-					"JSESSIONID=" + sessId[0],
-					"tr_session=" + tr_session[0],
-					"tr_claims=" + tr_claims[0],
-					"tr_device=" + tr_device[0],
-					"tr_refresh=" + tr_refresh[0],
-					"tr_external_id=" + tr_external_id[0],
+					"JSESSIONID=" + pwrt.sessId,
+					"tr_session=" + pwrt.tr_session,
+					"tr_claims=" + pwrt.tr_claims,
+					"tr_device=" + pwrt.tr_device,
+					"tr_refresh=" + pwrt.tr_refresh,
+					"tr_external_id=" + pwrt.tr_external_id,
 					"aws-waf-token=" + awsWafToken
 					));
 			replaceOrAddArrayListEntry(headers, cookieHeaderEntry);
@@ -350,59 +335,8 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			throw new ApplicationException("Holen der Kontodaten fehlgeschlagen");
 		}
 		
-//		
-//		
-//		awsWafToken = pwrt.awsWafToken;
-//		replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//		
-//		cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//				"JSESSIONID=" + sessId[0],
-//				"tr_session=" + tr_session[0],
-//				"tr_claims=" + tr_claims[0],
-//				"tr_device=" + tr_device[0],
-//				"tr_refresh=" + tr_refresh[0],
-//				"tr_external_id=" + tr_external_id[0],
-//				"aws-waf-token=" + awsWafToken
-//				));
-//		replaceArrayListEntry(headers, cookieHeaderEntry);
-//		
-//		
-//		
-//		response = doRequest(TRADEREP_ACCOUNT_URL, 
-//				HttpMethod.GET, headers, "application/json", 
-//				null);
-//		
-//		if (response.getHttpStatus() != 200) {
-//			// try with new AWS WAF token
-//			Thread.sleep(100);
-//
-//			// duplicate code above
-//			awsWafToken = pwrt.awsWafToken;
-//			replaceArrayListEntry(headers, new KeyValue<String, String>("x-aws-waf-token", awsWafToken));
-//			cookieHeaderEntry = new KeyValue<String, String>("Cookie", String.join("; ",
-//					"JSESSIONID=" + sessId[0],
-//					"tr_session=" + tr_session[0],
-//					"tr_claims=" + tr_claims[0],
-//					"tr_device=" + tr_device[0],
-//					"tr_refresh=" + tr_refresh[0],
-//					"tr_external_id=" + tr_external_id[0],
-//			
-//					"aws-waf-token=" + awsWafToken
-//					));
-//			replaceArrayListEntry(headers, cookieHeaderEntry);
-//			
-//			// retry account call
-//			response = doRequest(TRADEREP_ACCOUNT_URL, 
-//					HttpMethod.GET, headers, "application/json", 
-//					null);
-//			
-//			if (response.getHttpStatus() != 200) {
-//				log(Level.DEBUG, "Response: " + response.getContent());
-//				throw new ApplicationException("Holen der Kontodaten fehlgeschlagen");
-//			}
-//		}
 		
-		json = response.getJSONObject();
+		var json = response.getJSONObject();
 		log(Level.DEBUG, "Account Response: " + json);
 
 		
@@ -460,12 +394,12 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             request.setHeader("Cookie", String.join("; ",
                 "i18n_redirected=en",
                 "tr_appearance=Light",
-                "JSESSIONID=" + sessId[0],
-                "tr_session=" + tr_session[0],
-                "tr_claims=" + tr_claims[0],
-                "tr_device" + tr_device[0],
-                "tr_refresh=" + tr_refresh[0],
-                "tr_external_id" + tr_external_id[0],
+                "JSESSIONID=" + pwrt.sessId,
+                "tr_session=" + pwrt.tr_session,
+                "tr_claims=" + pwrt.tr_claims,
+                "tr_device" + pwrt.tr_device,
+                "tr_refresh=" + pwrt.tr_refresh,
+                "tr_external_id" + pwrt.tr_external_id,
                 "aws-waf-token=" + awsWafToken
                 // ... other cookies
             ));
