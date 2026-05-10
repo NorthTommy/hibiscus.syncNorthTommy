@@ -184,15 +184,12 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		response.getResponseHeader().forEach(nvp -> {
 			log(Level.DEBUG, "Login Step 1 header: " + nvp.getName() + ": " + nvp.getValue());
 			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
-				var val = nvp.getValue();
-				String[] vals = val.split(";");
-				for (String v : vals) {
-					if (v.startsWith("JSESSIONID")) {
-						sessId[0] = v.substring(val.indexOf("JSESSIONID=") + 11);
-					}
-					if (v.startsWith("tr_device")) {
-						tr_device[0] = v.substring(val.indexOf("tr_device=") + 10);
-					}
+				String[] vals = nvp.getValue().split(";");
+				if (vals[0].startsWith("JSESSIONID")) {
+					sessId[0] = vals[0].substring(11 /*JSESSIONID=*/);
+				}
+				if (vals[0].startsWith("tr_device")) {
+					tr_device[0] = vals[0].substring(10 /*tr_device=*/);
 				}
 			}
 		});
@@ -259,24 +256,21 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		response.getResponseHeader().forEach(nvp -> {
 			log(Level.DEBUG, "Login Step 2 header: " + nvp.getName() + ": " + nvp.getValue());
 			if (nvp.getName().compareToIgnoreCase("set-cookie") == 0) {
-				var val = nvp.getValue();
-				String[] vals = val.split(";");
-				for (String v : vals) {
-					if (v.startsWith("JSESSIONID")) {
-						sessId[0] = v.substring(val.indexOf("JSESSIONID=") + 11);
-					}
-					if (v.startsWith("tr_session")) {
-						tr_session[0] = v.substring(val.indexOf("tr_session=") + 11);
-					}
-					if (v.startsWith("tr_claims")) {
-						tr_claims[0] = v.substring(val.indexOf("tr_claims=") + 10);
-					}
-					if (v.startsWith("tr_refresh")) {
-						tr_refresh[0] = v.substring(val.indexOf("tr_refresh=") + 11);
-					}
-					if (v.startsWith("tr_external_id")) {
-						tr_external_id[0] = v.substring(val.indexOf("tr_external_id=") + 15);
-					}
+				String[] vals = nvp.getValue().split(";");
+				if (vals[0].startsWith("JSESSIONID")) {
+					sessId[0] = vals[0].substring(11 /*JSESSIONID=*/);
+				}
+				if (vals[0].startsWith("tr_session")) {
+					tr_session[0] = vals[0].substring(11 /*tr_session=*/);
+				}
+				if (vals[0].startsWith("tr_claims")) {
+					tr_claims[0] = vals[0].substring(10 /*tr_claims=*/);
+				}
+				if (vals[0].startsWith("tr_refresh")) {
+					tr_refresh[0] = vals[0].substring(11 /*tr_refresh=*/);
+				}
+				if (vals[0].startsWith("tr_external_id")) {
+					tr_external_id[0] = vals[0].substring(15 /*tr_external_id=*/);
 				}
 			}
 		});
