@@ -19,5 +19,6 @@
 	<classpathentry kind="lib" path="lib/websocket-common.jar"/>
 	<classpathentry kind="lib" path="lib/playwright.jar"/>
 	<classpathentry kind="lib" path="lib/playwright-stealth-4j.jar"/>
+	<classpathentry kind="lib" path="lib/kotlin-stdlib.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
