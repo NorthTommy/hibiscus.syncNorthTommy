@@ -96,7 +96,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		int trialCount = 0;
 		WebResult response = null;
 
-		boolean headlessBrowser = "true".equals(konto.getMeta(TraderepublicSynchronizeBackend.META_NOTHEADLESS, "true"));
+		boolean headlessBrowser = "false".equals(konto.getMeta(TraderepublicSynchronizeBackend.META_NOTHEADLESS, "false"));
 		String firefoxPath = konto.getMeta(TraderepublicSynchronizeBackend.META_FIREFOXPATH,  null);
 		
 		this.pwrt = new PlayWrightRunnerThread(this, firefoxPath, headlessBrowser, webClient, TRADEREP_PLAYWRIGTH_LOGIN);
@@ -668,7 +668,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
  					log(Level.DEBUG, "stop PlayWrightRunnerThread");
  					pwrt.stopRunning();
  					log(Level.DEBUG, "join PlayWrightRunnerThread waiting for finishing browser");
- 					pwrt.join(40000 /* more than defailt for Playwright.waitForResponse() */);
+ 					pwrt.join(40000 /* more than defalt for Playwright.waitForResponse() */);
  					log(Level.DEBUG, "stopped PlayWrightRunnerThread");
  				}
  			} catch (Exception e) {}

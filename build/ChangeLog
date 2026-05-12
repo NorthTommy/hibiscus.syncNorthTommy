@@ -19,3 +19,4 @@ Version		Date			Change
 0.3.2		2026-05-09		Fix version output in logfile; Fix passkey wallet entry to northtommy; Fix build launcher for eclipse
 0.3.3		2026-05-09		Markiere stornierte Transaktionen als solche im Verwendungszweck; Erweiterte Erkennung der Umsatztypen bei TR
 0.3.4		2026-05-09		Fix cookie handling for TR
+0.3.5		2026-05-12		Fix missing library; fixed sync option text for headless/non-headless 

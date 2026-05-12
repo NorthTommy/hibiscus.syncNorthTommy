@@ -14,8 +14,8 @@ public class TraderepublicSynchronizeBackend extends SyncNTSynchronizeBackend
 {
 	//public final static String META_CHROMEPATH = "Pfad zu chrome.exe (optional bei Problemen)";
 	public final static String META_FIREFOXPATH = "Pfad zu firefox.exe (optional bei Problemen)";
-	public final static String META_NOTHEADLESS = "Browser beim Ermitteln Akamai-Header anzeigen";
-	public final static String META_HEADERS = "Headerdaten";
+	public final static String META_NOTHEADLESS = "Browser anzeigen";
+	//public final static String META_HEADERS = "Headerdaten";
 	
     @Override
     public String getName()
