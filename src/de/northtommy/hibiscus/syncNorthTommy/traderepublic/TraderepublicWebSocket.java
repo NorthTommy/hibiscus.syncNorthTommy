@@ -47,6 +47,7 @@ public class TraderepublicWebSocket {
 	}
 	
 	private String clientVersion;
+	private String securitiesAccountNumber;
 	
 	//public void setClientVersion(String clientVersion) {
 	//	this.clientVersion = clientVersion;
@@ -156,12 +157,14 @@ public class TraderepublicWebSocket {
     
     private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     
-    public TraderepublicWebSocket(SyncNTSynchronizeJobKontoauszugLoggerI syncJobLogger, String version, Date rxDateRangeUntil) {
+    public TraderepublicWebSocket(SyncNTSynchronizeJobKontoauszugLoggerI syncJobLogger, String version,
+    		String securitiesAccountNumber, Date rxDateRangeUntil) {
 		if (syncJobLogger == null) {
 			throw new NullPointerException("syncJob must not be null");
 		}
     	this.syncJobLogger = syncJobLogger;
     	this.clientVersion = version;
+		this.securitiesAccountNumber = securitiesAccountNumber;
     	this.rxDateRangeUntil = rxDateRangeUntil;
 	}
     
@@ -215,11 +218,16 @@ public class TraderepublicWebSocket {
 	        	syncJobLogger.log(Level.DEBUG, "WebSocket request chash info: " + s);
 	        	this.session.getRemote().sendString(s);
 	        	
-	        	sPC = protoCounter++;
-	        	protoCompactPortfolioSubscription = sPC;
-	        	s = "sub " + sPC + " {\"type\":\"compactPortfolio\"}";
-	        	syncJobLogger.log(Level.DEBUG, "WebSocket request compact portfolio: " + s);
-	        	this.session.getRemote().sendString(s);
+	        	if ((securitiesAccountNumber != null) && (!securitiesAccountNumber.isBlank())) {
+	        		sPC = protoCounter++;
+	        		protoCompactPortfolioSubscription = sPC;
+	        		s = "sub " + sPC + " {\"type\":\"compactPortfolioByType\",\"secAccNo\":\""
+	        				+ securitiesAccountNumber + "\"}";
+	        		syncJobLogger.log(Level.DEBUG, "WebSocket request compact portfolio: " + s);
+	        		this.session.getRemote().sendString(s);
+	        	} else {
+	        		syncJobLogger.log(Level.WARN, "No securities account number available; skipping portfolio request");
+	        	}
 	        	
 
 	        	sPC = protoCounter++;
@@ -373,7 +381,8 @@ public class TraderepublicWebSocket {
 	    			if (compactPortfolio == null) {
 	    				if (msg.charAt(msg.indexOf(" ") + 1) == 'A') {
 	    					syncJobLogger.log(Level.DEBUG, "WebSocket got compact portfolio");
-	    					compactPortfolio = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
+	    					JSONObject portfolioResponse = new JSONObject(msg.substring(msg.indexOf(" ") + 3));
+	    					compactPortfolio = normalizeCompactPortfolio(portfolioResponse);
 	    					JSONArray positions = compactPortfolio.optJSONArray("positions");
 	    					if (positions != null) {
 	    						for (int i = 0; i < positions.length(); i++) {
@@ -445,7 +454,7 @@ public class TraderepublicWebSocket {
     		this.errorException = e;
     		rxState = RxState.FINISHED;
     	}
-        if ( (rxState == RxState.WAIT_REMAINING_SUBS) && 
+    	if ( (rxState == RxState.WAIT_REMAINING_SUBS) && 
         	(protoTransactionSubscriptions.isEmpty()) &&
         	(protoTransactionDetailSubscriptions.isEmpty()) &&
         	(protoCashSubscription == 0) &&
@@ -457,6 +466,37 @@ public class TraderepublicWebSocket {
         	rxState = RxState.FINISHED;
         }
     }
+
+	private JSONObject normalizeCompactPortfolio(JSONObject portfolioResponse) {
+		JSONArray positions = new JSONArray();
+		JSONArray categories = portfolioResponse.optJSONArray("categories");
+		if (categories != null) {
+			for (int i = 0; i < categories.length(); i++) {
+				JSONObject category = categories.optJSONObject(i);
+				JSONArray categoryPositions = category != null ? category.optJSONArray("positions") : null;
+				if (categoryPositions == null) {
+					continue;
+				}
+				for (int j = 0; j < categoryPositions.length(); j++) {
+					JSONObject position = categoryPositions.optJSONObject(j);
+					if (position == null) {
+						continue;
+					}
+					if (!position.has("instrumentId") && position.has("isin")) {
+						position.put("instrumentId", position.optString("isin"));
+					}
+					positions.put(position);
+				}
+			}
+		} else {
+			JSONArray legacyPositions = portfolioResponse.optJSONArray("positions");
+			if (legacyPositions != null) {
+				positions = legacyPositions;
+			}
+		}
+		portfolioResponse.put("positions", positions);
+		return portfolioResponse;
+	}
 
     @OnWebSocketClose
     public void onClose(int statusCode, String reason) {

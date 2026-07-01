@@ -348,7 +348,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		String destUri = TRADEREP_WSS_URL;
         WebSocketClient client = new WebSocketClient();
-        TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "14.23.3", untilDate);
+		String securitiesAccountNumber = json.optString("securitiesAccountNumber", null);
+		TraderepublicWebSocket socket = new TraderepublicWebSocket(
+				this, "14.23.3", securitiesAccountNumber, untilDate);
 
         try {
         		String awsWafToken = pwrt.awsWafToken;
