@@ -16,6 +16,7 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Page.ScreenshotOptions;
 import com.microsoft.playwright.Route.FulfillOptions;
+import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.ScreenshotAnimations;
 import com.microsoft.playwright.options.ScreenshotType;
 
@@ -123,31 +124,45 @@ public class PlayWrightRunnerThread extends Thread {
 		
         try {
             while (running) {
-            	var response = pwPage.waitForResponse(r -> 
-					(r.url().indexOf("telemetry") != -1), () -> {}
-				);
-						
-				//String url = response.url();
-				//syncJob.log(Level.INFO, "url: " + url);
-				
-				String resp = response.text();
-				var json = new JSONObject(resp);
-				
-				// try to find the token inside the response and update the stored token
-				awsWafToken = json.optString("token");
-				syncJobLogger.log(Level.INFO, "got new AWS WAF token: " + awsWafToken);
-                if (awsWafToken != null) {
-                    syncJobLogger.log(Level.DEBUG, "Aktueller AWS WAF token: " + awsWafToken);
+	            	try {
+	            		// 1. Add a short timeout (e.g., 2000 milliseconds)
+	            		com.microsoft.playwright.Page.WaitForResponseOptions options = new com.microsoft.playwright.Page.WaitForResponseOptions().setTimeout(2000);
+	                
+	            		var response = pwPage.waitForResponse(r -> 
+						(r.url().indexOf("telemetry") != -1), options, () -> {}
+					);
+							
+					//String url = response.url();
+					//syncJob.log(Level.INFO, "url: " + url);
+					
+					String resp = response.text();
+					var json = new JSONObject(resp);
+					
+					// try to find the token inside the response and update the stored token
+					awsWafToken = json.optString("token");
+					syncJobLogger.log(Level.INFO, "got new AWS WAF token: " + awsWafToken);
+	                if (awsWafToken != null) {
+	                    syncJobLogger.log(Level.DEBUG, "Aktueller AWS WAF token: " + awsWafToken);
+	                }
+	                
+	                Thread.yield();
+	                Thread.sleep(1);
+            		} catch (TimeoutError e) {
+                    // 2. Catch the timeout. 
+                    // This is expected if no telemetry fires within the 2-second window.
+                    // The loop will simply continue, check 'running', and try again if true.
                 }
-                Thread.yield();
-                Thread.sleep(1);
             }
             syncJobLogger.log(Level.INFO, "PlayWrightRunnerThread wird beendet");
         } catch (InterruptedException e) {
-            syncJobLogger.log(Level.WARN, "PlayWrightRunnerThread wurde unterbrochen");
-            Thread.currentThread().interrupt();
+        		if (running) {
+        			syncJobLogger.log(Level.WARN, "PlayWrightRunnerThread wurde unterbrochen");
+        			Thread.currentThread().interrupt();
+        		}
         } catch (Exception e) {
-            syncJobLogger.log(Level.WARN, "PlayWrightRunnerThread Fehler beim Token-Lesen: " + e.getMessage());
+        		if (running) {
+        			syncJobLogger.log(Level.WARN, "PlayWrightRunnerThread Fehler beim Token-Lesen: " + e.getMessage());
+        		}
         } finally {
         	syncJobLogger.log(Level.INFO, "PlayWrightRunnerThread close browser");
         	if (pwPage != null) pwPage.close();

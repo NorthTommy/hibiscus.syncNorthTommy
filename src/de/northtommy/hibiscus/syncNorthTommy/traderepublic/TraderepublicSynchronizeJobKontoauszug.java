@@ -653,6 +653,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 
         } finally {
             try {
+            		log(Level.INFO, "Stop Websocketclient in background ...");
                 client.stop();
             } catch (Exception e) {
                 e.printStackTrace();
@@ -669,10 +670,10 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
  			
  			try {
  				if (pwrt != null) {
- 					log(Level.DEBUG, "stop PlayWrightRunnerThread");
+ 					log(Level.INFO, "Stop PlayWright in background ...");
  					pwrt.stopRunning();
  					log(Level.DEBUG, "join PlayWrightRunnerThread waiting for finishing browser");
- 					pwrt.join(40000 /* more than defalt for Playwright.waitForResponse() */);
+ 					pwrt.join(40000 /* more than default for Playwright.waitForResponse() */);
  					log(Level.DEBUG, "stopped PlayWrightRunnerThread");
  				}
  			} catch (Exception e) {}
