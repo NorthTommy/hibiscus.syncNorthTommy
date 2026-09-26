@@ -86,6 +86,9 @@ final class TraderepublicTransactionAnalyzer {
 				orderType = "Buy";
 			}
 		}
+		if (orderType == null) {
+			throw new ParseException("Kein Ordertype gefunden (" + id + ")", 0);
+		}
 		orderType = orderType.replace("Savings plan", "Buy");
 		if (!(orderType.equals("Buy") || orderType.equals("Sell"))) {
 			throw new ParseException("Unbekannter Ordertype " + orderType + " (" + id + ")", 0);
