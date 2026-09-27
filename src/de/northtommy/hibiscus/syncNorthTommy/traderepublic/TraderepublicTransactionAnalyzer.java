@@ -81,6 +81,9 @@ final class TraderepublicTransactionAnalyzer {
 			if ("Sell".equals(getSection(details, "sections", "Overview", "data", "[0]", "title"))) {
 				orderType = "Sell";
 			}
+			if (orderType == null && "Buy".equals(getSection(details, "sections", "Overview", "data", "[0]", "title"))) {
+				orderType = "Buy";
+			}
 			if (orderType == null && (eventType.startsWith("SAVEBACK_AGGREGATE")
 					|| eventType.startsWith("TRADING_SAVINGSPLAN_EXECUTED"))) {
 				orderType = "Buy";
