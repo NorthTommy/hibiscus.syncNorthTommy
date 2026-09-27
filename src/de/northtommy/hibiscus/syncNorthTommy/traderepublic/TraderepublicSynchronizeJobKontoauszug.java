@@ -346,7 +346,18 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		}
 		
 		String destUri = TRADEREP_WSS_URL;
-        WebSocketClient client = new WebSocketClient();
+        // Jetty loads its WebSocket extensions (e.g. permessage-deflate) via the thread context
+        // classloader. If the sync is started from a foreign thread (e.g. an MCP/RPC call), that
+        // classloader does not see this plugin's libs and compressed frames fail with
+        // "RSV1 not allowed to be set".
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        WebSocketClient client;
+        try {
+            Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+            client = new WebSocketClient();
+        } finally {
+            Thread.currentThread().setContextClassLoader(contextClassLoader);
+        }
         TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "14.23.3", untilDate);
 
         try {
