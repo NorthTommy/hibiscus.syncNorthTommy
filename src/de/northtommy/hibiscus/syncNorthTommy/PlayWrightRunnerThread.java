@@ -140,10 +140,9 @@ public class PlayWrightRunnerThread extends Thread {
 					
 					// try to find the token inside the response and update the stored token
 					awsWafToken = json.optString("token");
-					syncJobLogger.log(Level.INFO, "got new AWS WAF token: " + awsWafToken);
-	                if (awsWafToken != null) {
-	                    syncJobLogger.log(Level.DEBUG, "Aktueller AWS WAF token: " + awsWafToken);
-	                }
+					if (awsWafToken != null && !awsWafToken.isBlank()) {
+						syncJobLogger.log(Level.INFO, "got new AWS WAF token");
+					}
 	                
 	                Thread.yield();
 	                Thread.sleep(1);

@@ -48,6 +48,7 @@ import de.willuhn.jameica.hbci.messaging.ObjectChangedMessage;
 import de.willuhn.jameica.hbci.messaging.ObjectDeletedMessage;
 import de.willuhn.jameica.hbci.messaging.SaldoMessage;
 import de.willuhn.jameica.hbci.rmi.Konto;
+import de.willuhn.jameica.hbci.rmi.KontoType;
 import de.willuhn.jameica.hbci.rmi.Umsatz;
 import de.willuhn.jameica.hbci.synchronize.SynchronizeBackend;
 import de.willuhn.jameica.system.Application;
@@ -347,7 +348,10 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		String destUri = TRADEREP_WSS_URL;
         WebSocketClient client = new WebSocketClient();
-        TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "14.23.3", untilDate);
+		client.getHttpClient().setRequestBufferSize(64 * 1024);
+		String securitiesAccountNumber = json.optString("securitiesAccountNumber", null);
+		TraderepublicWebSocket socket = new TraderepublicWebSocket(
+				this, "14.23.3", securitiesAccountNumber, untilDate);
 
         try {
         		String awsWafToken = pwrt.awsWafToken;
@@ -383,9 +387,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
                 "JSESSIONID=" + sessId[0],
                 "tr_session=" + tr_session[0],
                 "tr_claims=" + tr_claims[0],
-                "tr_device" + tr_device[0],
+                "tr_device=" + tr_device[0],
                 "tr_refresh=" + tr_refresh[0],
-                "tr_external_id" + tr_external_id[0],
+                "tr_external_id=" + tr_external_id[0],
                 "aws-waf-token=" + awsWafToken
                 // ... other cookies
             ));
@@ -407,8 +411,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             if (socket.getRxState() != RxState.FINISHED) {
             	throw new ApplicationException("Synchronisation Timeout");
             }
-            
-            
+            if (KontoType.WERTPAPIERDEPOT.getValue() == konto.getAccountType()) {
+				return new TraderepublicDepotSynchronizeJob(this).process(konto, fetchSaldo, fetchUmsatz, socket);
+            }
             if (fetchSaldo) {
             	boolean foundAccount = false;
             	var accountsCash = socket.getAccountsCash();
