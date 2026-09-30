@@ -347,7 +347,8 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		String destUri = TRADEREP_WSS_URL;
         WebSocketClient client = new WebSocketClient();
-        TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "14.23.3", untilDate);
+		client.getHttpClient().setRequestBufferSize(64 * 1024);
+		TraderepublicWebSocket socket = new TraderepublicWebSocket(this, "14.23.3", untilDate);
 
         try {
         		String awsWafToken = pwrt.awsWafToken;
@@ -383,9 +384,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
                 "JSESSIONID=" + sessId[0],
                 "tr_session=" + tr_session[0],
                 "tr_claims=" + tr_claims[0],
-                "tr_device" + tr_device[0],
+                "tr_device=" + tr_device[0],
                 "tr_refresh=" + tr_refresh[0],
-                "tr_external_id" + tr_external_id[0],
+                "tr_external_id=" + tr_external_id[0],
                 "aws-waf-token=" + awsWafToken
                 // ... other cookies
             ));
