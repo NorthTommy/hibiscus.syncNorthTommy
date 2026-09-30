@@ -396,7 +396,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 
             long syncStart = System.currentTimeMillis();
             
-            while (((socket.getRxState() != TraderepublicWebSocket.RxState.FINISHED)) && ((System.currentTimeMillis() - syncStart) < 60000)) {
+            while ((socket.getRxState() != TraderepublicWebSocket.RxState.FINISHED) && (socket.getRxState() != TraderepublicWebSocket.RxState.ERROR) && ((System.currentTimeMillis() - syncStart) < 60000)) {
             	Thread.sleep(1000);
             }
             socket.awaitClose(2, TimeUnit.SECONDS);
