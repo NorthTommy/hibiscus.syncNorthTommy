@@ -43,7 +43,8 @@ public class TraderepublicWebSocket {
 	public enum RxState {
 		RUNNING,
 		WAIT_REMAINING_SUBS,
-		FINISHED
+		FINISHED,
+		ERROR,
 	}
 	
 	private String clientVersion;
@@ -369,5 +370,6 @@ public class TraderepublicWebSocket {
         System.err.println("WebSocket error: " + cause.getMessage());
         this.syncJobLogger.log(Level.ERROR, "WebSocket connection error: " + cause.getMessage());
         this.errorException = new Exception(cause);
+        this.rxState = RxState.ERROR;
     }
 }
