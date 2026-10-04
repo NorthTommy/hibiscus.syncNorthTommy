@@ -22,3 +22,5 @@ Version		Date			Change
 0.3.5		2026-05-12		Fix missing library; fixed sync option text for headless/non-headless 
 0.3.6		2026-07-28  		Fix warning of AWS Token timeout when waiting for Thread join 
 							Fix #10 Zinia getting transactions when first page of transactions already leads to pendingRecords and SCA Code
+			2026-09-04		Fix for TradeRepublic #11 (#15) - merged pullrequest by Murkas94 (based on @littleyoda) 
+								increased buffer size for websocket connection
