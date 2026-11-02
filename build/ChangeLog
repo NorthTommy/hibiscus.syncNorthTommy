@@ -17,3 +17,12 @@ Version		Date			Change
 0.3.0		2026-03-31		Fixed TradeRepublic Account sync (AWS WAF handling added)
 0.3.1		2026-04-03		Increment timeout for starting firefox in background for Traderepublic
 0.3.2		2026-05-09		Fix version output in logfile; Fix passkey wallet entry to northtommy; Fix build launcher for eclipse
+0.3.3		2026-05-09		Markiere stornierte Transaktionen als solche im Verwendungszweck; Erweiterte Erkennung der Umsatztypen bei TR
+0.3.4		2026-05-09		Fix cookie handling for TR
+0.3.5		2026-05-12		Fix missing library; fixed sync option text for headless/non-headless 
+0.3.6		2026-07-28  	Fix warning of AWS Token timeout when waiting for Thread join 
+							Fix #10 Zinia getting transactions when first page of transactions already leads to pendingRecords and SCA Code
+			2026-09-04		Fix for TradeRepublic #11 (#15) - merged pullrequest by Murkas94 (based on @littleyoda) 
+							increased buffer size for websocket connection
+0.4.0		2026-11-02		Changed to v2 of Traderepublic login process with no code but app confirm
+								

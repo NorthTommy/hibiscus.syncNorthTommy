@@ -41,7 +41,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 	private static final String AMZ_ZINIA_LOGOUT_URL = "https://api.prod.cb.amazon.zinia.de/cb-api-auth/authentication/logout";
 	
 	private static final String AMZ_ZINIA_SALDO_URL = "https://api.prod.cb.amazon.zinia.de/cb-api-cards/v3/cards?getMenus=EXPANDED&cardStatusCode=ACTIVE,INACTIVE,LOCKED,TEMPORARILY_BLOCKED,BLOCKED,CANCELED";
-	
+	private static final int AMZ_ZINIA_TRANSACTIONS_PAGE_LIMIT = 25;
 	
 	@Resource
 	private AmzZiniaSynchronizeBackend backend = null;
@@ -227,12 +227,19 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 				
 				do {
 					// Perform first transactions request
-					var url = AMZ_ZINIA_TRANSACTIONS_URL + "?limit=25&epp=true";
+					var url = AMZ_ZINIA_TRANSACTIONS_URL + "?limit="+AMZ_ZINIA_TRANSACTIONS_PAGE_LIMIT+"&epp=true";
 					// add the last known cursor info (not present on first call)
-					// skip it 2nd call after SCA of 'all requests'
+					// skip it 2nd call after SCA of 'all requests' to restart from beginning of all transactions 
 					if (!transactionNextCursor.isEmpty() && 
 							( (!scaDone[0]) || (scaDone[0] && (requestCounterAfterSCA!=1))) ) {
 						url = url + "&cursor=" + transactionNextCursor;
+					} else {
+						// Fix #10 "Abruf der Transaktionen fehlgeschlagen" (27.07.2026)
+						// There need to be a cursor field always, especially no 1st call without cursor is allowed after SCA with includeAllRecords.
+						// Empty cursor value seems to be allowed.
+						// Problem occured whenalready pendingRecords were detected in first Page (e.g. limit 25) when no cursor was set
+						// The 1st call after SCA failed in this case with "FORBIDDEN" 
+						url = url + "&cursor=";
 					}
 					if (scaDone[0]) {
 						url = url + "&includeAllRecords=true";
@@ -290,7 +297,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 						
 						
 						// recall transactions request with "nextStep OTP...." and current cursor
-						url = AMZ_ZINIA_TRANSACTIONS_URL + "?limit=25&epp=true&cursor=" + transactionNextCursor + "&includeAllRecords=true";
+						url = AMZ_ZINIA_TRANSACTIONS_URL + "?limit="+AMZ_ZINIA_TRANSACTIONS_PAGE_LIMIT+"&epp=true&cursor=" + transactionNextCursor + "&includeAllRecords=true";
 						response = doRequest(url, HttpMethod.GET, headers, "application/json", null);
 						if (response.getHttpStatus() != 403) {
 							log(Level.DEBUG, "Request 'includeAllRecords' failed - Response: " + response.getContent());
@@ -458,7 +465,7 @@ public class AmzZiniaSynchronizeJobKontoauszug extends SyncNTSynchronizeJobKonto
 									Application.getMessagingFactory().sendMessage(new ObjectChangedMessage(duplicate));
 								} else {
 									// we should stop only on first booked transaction, else we may loose some pending if they are more on a further request.
-									// nevertheless this assumed, that pending transactions are more or less at the beginning of the transactions
+									// nevertheless this assumes, that pending transactions are more or less at the beginning of the transactions
 									// the monthly income would be duplicate but we suppress this entry because checking for outgoing transaction
 									if (duplicate.getBetrag() < 0.0) {
 										duplicateRxFound[0] = true;

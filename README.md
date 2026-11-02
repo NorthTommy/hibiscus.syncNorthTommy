@@ -39,3 +39,31 @@ Dass dabei Depot-Bewegungen auftrauchen ist dem geschuldet, dass das Konto neben
 
 #### Bekannte Probleme / Einschränkungen
 - Einige der Umsatztypen können noch unbekannt sein (dann wird bei "Art" als "Sonstiges (<type>)" eingetragen). In dem Falle gerne ein passenden Hinweis mit dem Typen und um welche Art von Buchung es sich handelt.
+
+### Wichtig für den Datenschutz auf dem eigenen Rechner
+Da es sich immer noch um eine 0.x Version handelt, die auch released immer noch Entwicklungszustand hat (dazu ändern die Banken zu oft ihre Interfaces), werden rel. viele Daten
+via DEBUG-Level beim Abrufen gelogged. Dies schließt auch Teile von Zugangsdaten (z.B. in Form von URL-Parameters von https-calls (ja das machen einige Banken wirklich)) und Transaktionsdaten in Form raw-JSON ein.
+Entgegen der üblichen Sicherheit von Jameica der die Datenbank verschlüsselt, liegen logs frei auf dem Rechner.
+Also bitte beachten wenn ihr DEBUG logleven anhabt, dann ist es eben auch debug samt Daten. Ausschalten und alte logs sicher löschen.
+Dann wird nur noch der Ablauf des Plugins gelogged.
+
+## Developer
+Folge der [offiziellen Anleitung](https://www.willuhn.de/wiki/doku.php?id=develop:eclipse) für Entwickler um Jameica Plugins zu bauen.
+
+Du brauchst das Plugin für Hibiscus und eben dieses hier. Dazu jeweils die Git-Hub Projekte analog zum Jameica Projekt clonen und in Eclipse importieren.
+Um die Plugins dann auch beim Start zu laden, folge auch hier der Anleitung für das Example-Projekt.
+In der Datei cfg/de.willuhn.jameica.system.Config.properties im Benutzerverzeichnis für Jameica sollte dann mindestens etwas wie:<br>
+jameica.plugin.dir.0=../hibiscus.syncNorthTommy<br>
+jameica.plugin.dir.1=../SyncusGnampfus
+drin stehen (je nachdem wie die Projekte genannt wurden).
+
+### Erster Build des Plugin - Abhängigkeiten auflösen
+Einmalig (oder bei jeder Änderung der Abhängigkeiten die mittels ANT aufgelöst werden) muss man über die build.xml das all-Target ausführen.
+Danach kann dann je nach Vorliebe erstmal nur das jar-Target genutzt werden um schneller zu bauen und zu debuggen.
+
+### Debug/Run (Launcher vs. manuell)
+Debug/Run erfolgt dann immer über die Run-Konfiguration von Jameica Main (siehe dazu die offizielle Anleitung).
+Für Tests ein ganzes Plugin als Zip zu bauen, kann man auch zip-Target nutzen - dieses kann man dann auch in einer "echten" Instanz von Jameica importieren ohne testen (ohne es über Eclipse zu starten).<br>
+Es ist empfehlenswert immer nur einen Build im release-ordner zu belassen, damit beim Starten wirklich der aktuelle Build genutzt wird.
+Der Build-Launcher für dieses Plugin ist aktuell auf clean und jar eingestellt und kann genutzt werden (Default in Eclipse ist Auto-Build, sodass "Build" einzeln ausgegraut ist) - hier gilt nach Vorliebe Eclipse nutzen.
+Um andere ANT-Targets auszuführen: rechte Maustaste auf build/build.xml RunAs > Ant Build... und dann das/die Target(s) auswählen.
