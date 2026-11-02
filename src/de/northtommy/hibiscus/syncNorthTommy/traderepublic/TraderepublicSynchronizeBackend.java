@@ -38,7 +38,7 @@ public class TraderepublicSynchronizeBackend extends SyncNTSynchronizeBackend
 
 			List<String> result = new ArrayList<String>();
 			result.add(META_FIREFOXPATH);
-			result.add(META_NOTHEADLESS + "(true/false)");
+			result.add(META_NOTHEADLESS);
 			return result;
 		} 
 		catch (RemoteException e) 
