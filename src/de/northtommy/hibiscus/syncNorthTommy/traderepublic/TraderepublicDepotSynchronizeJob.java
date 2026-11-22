@@ -1,12 +1,9 @@
 package de.northtommy.hibiscus.syncNorthTommy.traderepublic;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -45,28 +42,30 @@ class TraderepublicDepotSynchronizeJob {
 	boolean process(Konto konto, boolean fetchSaldo, boolean fetchUmsatz,
 			TraderepublicWebSocket socket) throws Exception {
 		owner.log(Level.INFO, "Depotdaten werden abgerufen...");
-		boolean saveDebug = "true".equals(konto.getMeta(TraderepublicSynchronizeBackend.META_JSONDATA, "true"));
+		boolean saveDebug = TraderepublicSynchronizeBackend.isDebugEnabled(konto);
+
+		if (saveDebug) {
+			Path directory = Path.of(Application.getConfig().getWorkDir());
+			saveDebugData(directory, socket);
+			owner.log(Level.INFO, "Debug-Daten gespeichert in " + directory
+					+ " (TR-portfolio.json, TR-Transactions.zip)");
+		}
 
 		if (fetchSaldo) {
-			handlePortfolio(konto, socket, saveDebug);
+			handlePortfolio(konto, socket);
 		}
 
 		if (fetchUmsatz) {
-			handleTransactions(konto, socket.getAccountTransactions(), saveDebug);
+			handleTransactions(konto, socket.getAccountTransactions());
 		}
 		return true;
 	}
 
-	private void handlePortfolio(Konto konto, TraderepublicWebSocket socket, boolean saveDebug)
+	private void handlePortfolio(Konto konto, TraderepublicWebSocket socket)
 			throws Exception, RemoteException, ApplicationException {
 		var compactPortfolio = socket.getCompactPortfolio();
 		if (compactPortfolio == null) {
-			owner.log(Level.ERROR, "Kein Portfolio vom WebSocket empfangen.");
-		}
-		if (saveDebug) {
-			Path p = Path.of(Application.getConfig().getWorkDir(), "TR-portfolio.json");
-			owner.log(Level.INFO, "Speichere Portolio in " + p.toFile());
-			saveRawJsonFile(p, compactPortfolio);
+			throw new ApplicationException("Kein Portfolio vom WebSocket empfangen. Depotnummer und Kontodaten pruefen.");
 		}
 		JSONArray positions = compactPortfolio.optJSONArray("positions");
 		if (positions == null) {
@@ -135,36 +134,11 @@ class TraderepublicDepotSynchronizeJob {
 
 	}
 
-	private void handleTransactions(Konto konto, ArrayList<TraderepublicWebSocket.Transaction> transactions,
-			boolean saveDebug) throws Exception {
+	private void handleTransactions(Konto konto, ArrayList<TraderepublicWebSocket.Transaction> transactions) throws Exception {
 		double calculatedSaldo = konto.getSaldo();
 		ArrayList<Umsatz> duplicatesRxNotBooked = new ArrayList<Umsatz>();
 		ArrayList<HashMap<String, Object>> transactionen = new ArrayList<>();
 
-		if (saveDebug) {
-			owner.log(Level.DEBUG, "Transaktionen von TR erhalten: " + transactions.size());
-			Path p = Path.of(Application.getConfig().getWorkDir(), "TR-Transactions.zip");
-			OutputStream f = Files.newOutputStream(p, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-			try (ZipOutputStream zos = new ZipOutputStream(f)) {
-				for (int i = 0; i < transactions.size(); i++) {
-					var t = transactions.get(i);
-					System.out.println(t.getClass());
-					String id = TraderepublicTransactionAnalyzer.getId(t.details);
-
-					ZipEntry zipEntry = new ZipEntry(id + "-d.json");
-					zos.putNextEntry(zipEntry);
-					byte[] data = t.details.toString().getBytes(StandardCharsets.UTF_8);
-					zos.write(data, 0, data.length);
-					zos.closeEntry();
-
-					zipEntry = new ZipEntry(id + "-t.json");
-					zos.putNextEntry(zipEntry);
-					data = t.transaction.toString().getBytes(StandardCharsets.UTF_8);
-					zos.write(data, 0, data.length);
-					zos.closeEntry();
-				}
-			}
-		}
 		owner.log(Level.DEBUG, "Transaktionen von TR erhalten: " + transactions.size());
 		for (int i = 0; i < transactions.size(); i++) {
 			var transaction = transactions.get(i).transaction;
@@ -217,11 +191,31 @@ class TraderepublicDepotSynchronizeJob {
 		return Date.from(java.time.Instant.parse(value));
 	}
 
-	private void saveRawJsonFile(Path path, Object obj) throws IOException {
-		if (obj == null) {
-			return;
+	static void saveDebugData(Path directory, TraderepublicWebSocket socket) throws IOException {
+		saveRawJsonFile(directory.resolve("TR-portfolio.json"), socket.getCompactPortfolio());
+		try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(
+				directory.resolve("TR-Transactions.zip"), StandardOpenOption.CREATE,
+				StandardOpenOption.TRUNCATE_EXISTING))) {
+			var transactions = socket.getAccountTransactions();
+			for (int i = 0; i < transactions.size(); i++) {
+				var transaction = transactions.get(i);
+				// Index keeps entries unique even when IDs or details are missing.
+				String id = transaction.transaction != null ? transaction.transaction.optString("id", "transaction") : "transaction";
+				id = id.replaceAll("[^a-zA-Z0-9_-]", "_") + "-" + i;
+				writeDebugEntry(zos, id + "-d.json", transaction.details);
+				writeDebugEntry(zos, id + "-t.json", transaction.transaction);
+			}
 		}
-		Files.writeString(path, obj.toString(), StandardCharsets.UTF_8,
+	}
+
+	private static void writeDebugEntry(ZipOutputStream zos, String name, Object value) throws IOException {
+		zos.putNextEntry(new ZipEntry(name));
+		zos.write(String.valueOf(value).getBytes(StandardCharsets.UTF_8));
+		zos.closeEntry();
+	}
+
+	private static void saveRawJsonFile(Path path, Object obj) throws IOException {
+		Files.writeString(path, String.valueOf(obj), StandardCharsets.UTF_8,
 				StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
 	}
 

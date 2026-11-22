@@ -19,6 +19,15 @@ public class TraderepublicSynchronizeBackend extends SyncNTSynchronizeBackend
 	public final static String META_HEADERS = "Headerdaten";
 	public final static String META_JSONDATA = "Speichere Debug-Daten";
 
+	static boolean isDebugEnabled(Konto konto) throws RemoteException {
+		// Read existing settings stored under the previously displayed property name as well.
+		String value = konto.getMeta(META_JSONDATA, null);
+		if (value == null) {
+			value = konto.getMeta(META_JSONDATA + "(true/false)", "true");
+		}
+		return "true".equals(value);
+	}
+
     @Override
     public String getName()
     {
@@ -42,7 +51,7 @@ public class TraderepublicSynchronizeBackend extends SyncNTSynchronizeBackend
 			result.add(META_FIREFOXPATH);
 			result.add(META_NOTHEADLESS);
 	        if (KontoType.WERTPAPIERDEPOT.getValue() == konto.getAccountType()) {
-				result.add(META_JSONDATA + "(true/false)");
+				result.add(META_JSONDATA);
 			}
 			return result;
 		} 

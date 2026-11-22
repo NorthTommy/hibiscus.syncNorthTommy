@@ -5,6 +5,9 @@ import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
 import java.text.SimpleDateFormat;
@@ -48,6 +51,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	private static final String TRADEREP_LOGIN_PROCESS_URL = "https://api.traderepublic.com/api/v2/auth/web/login/processes/";
 	// previously /api/v2/auth/account - no longer used by the web app; this call is made directly after login confirmation
 	private static final String TRADEREP_ACCOUNT_URL = "https://api.traderepublic.com/api/v1/account-manager/accounts/switchable";
+	private static final String TRADEREP_ACCOUNT_SETTINGS_URL = "https://api.traderepublic.com/api/v2/auth/account";
 	private static final String TRADEREP_WSS_URL = "wss://api.traderepublic.com/";
 	private static final String TRADEREP_LOGOUT_URL = "https://api.traderepublic.com/api/v1/auth/web/logout";
 	
@@ -265,6 +269,35 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		json = response.getJSONObject();
 		log(Level.DEBUG, "Account Response: " + json);
+		boolean depot = KontoType.WERTPAPIERDEPOT.getValue() == konto.getAccountType();
+		boolean saveDebug = depot && TraderepublicSynchronizeBackend.isDebugEnabled(konto);
+		if (saveDebug) {
+			saveAccountDebug("TR-accounts.json", response);
+		}
+		String securitiesAccountNumber = json.optString("securitiesAccountNumber", null);
+		if (depot && isBlank(securitiesAccountNumber)) {
+			// The switchable-accounts response is not the account settings used by the depot API.
+			log(Level.INFO, "Hole Depotnummer aus den Kontoeinstellungen.");
+			trialCount = 0;
+			do {
+				updateRequestAuthHeaders(headers);
+				response = doRequest(TRADEREP_ACCOUNT_SETTINGS_URL, HttpMethod.GET, headers, "application/json", null);
+				trialCount++;
+				if (response.getHttpStatus() != 200) {
+					Thread.sleep(300);
+				}
+			} while (response.getHttpStatus() != 200 && trialCount < 3);
+			collectSessionCookies(response, "Account settings");
+			if (saveDebug) {
+				saveAccountDebug("TR-account-settings.json", response);
+			}
+			if (response.getHttpStatus() == 200) {
+				securitiesAccountNumber = response.getJSONObject().optString("securitiesAccountNumber", null);
+			}
+			if (isBlank(securitiesAccountNumber)) {
+				log(Level.WARN, "Keine Depotnummer in den Kontoeinstellungen erhalten (HTTP " + response.getHttpStatus() + ")");
+			}
+		}
 		
 		
 		log(Level.INFO, "Saldo und Ums\u00E4tze werden abgerufen...");
@@ -288,7 +321,6 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		String destUri = TRADEREP_WSS_URL;
         WebSocketClient client = new WebSocketClient();
 		client.getHttpClient().setRequestBufferSize(64 * 1024);
-		String securitiesAccountNumber = json.optString("securitiesAccountNumber", null);
 		String clientVersion = pwrt.trHeaders.getOrDefault("x-tr-app-version", TRADEREP_DEFAULT_CLIENT_VERSION);
 		log(Level.DEBUG, "WSS client version: " + clientVersion);
 		TraderepublicWebSocket socket = new TraderepublicWebSocket(this, clientVersion, securitiesAccountNumber, untilDate);
@@ -677,6 +709,15 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			return "+49" + phone.substring(1);
 		}
 		return phone;
+	}
+
+	private void saveAccountDebug(String filename, WebResult response) throws java.io.IOException {
+		Path path = Path.of(Application.getConfig().getWorkDir(), filename);
+		JSONObject debug = new JSONObject();
+		debug.put("httpStatus", response.getHttpStatus());
+		debug.put("body", response.getContent());
+		Files.writeString(path, debug.toString(), StandardCharsets.UTF_8);
+		log(Level.INFO, "Kontodaten fuer Debug gespeichert in " + path);
 	}
 
 	private static boolean isBlank(String value) {
