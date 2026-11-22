@@ -5,6 +5,9 @@ import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
 import java.text.SimpleDateFormat;
@@ -30,6 +33,7 @@ import de.willuhn.jameica.hbci.messaging.ObjectChangedMessage;
 import de.willuhn.jameica.hbci.messaging.ObjectDeletedMessage;
 import de.willuhn.jameica.hbci.messaging.SaldoMessage;
 import de.willuhn.jameica.hbci.rmi.Konto;
+import de.willuhn.jameica.hbci.rmi.KontoType;
 import de.willuhn.jameica.hbci.rmi.Umsatz;
 import de.willuhn.jameica.hbci.synchronize.SynchronizeBackend;
 import de.willuhn.jameica.system.Application;
@@ -47,6 +51,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	private static final String TRADEREP_LOGIN_PROCESS_URL = "https://api.traderepublic.com/api/v2/auth/web/login/processes/";
 	// previously /api/v2/auth/account - no longer used by the web app; this call is made directly after login confirmation
 	private static final String TRADEREP_ACCOUNT_URL = "https://api.traderepublic.com/api/v1/account-manager/accounts/switchable";
+	private static final String TRADEREP_ACCOUNT_SETTINGS_URL = "https://api.traderepublic.com/api/v2/auth/account";
 	private static final String TRADEREP_WSS_URL = "wss://api.traderepublic.com/";
 	private static final String TRADEREP_LOGOUT_URL = "https://api.traderepublic.com/api/v1/auth/web/logout";
 	
@@ -56,9 +61,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	private static final int LOGIN_POLL_INTERVAL_MS = 2000;
 	// max. time for the user to confirm the login in the app (server side expiry is ~2min)
 	private static final int LOGIN_CONFIRM_TIMEOUT_MS = 150000;
-	
+
 	private PlayWrightRunnerThread pwrt = null;
-	
+
 	/**
 	 * cookies received via set-cookie (name -> value) during login, sent with all further requests
 	 * (without aws-waf-token, which is always appended with the current value)
@@ -112,7 +117,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		log(Level.INFO, "Warte auf AWS WAF token und Ger\u00E4tedaten vom Browser");
 		this.pwrt.start();
-		
+
 		// waiting until playwright thread got a first token and the x-tr headers of the web app
 		int pwrtTimeout = 120; /* times 1s -> 2min */
 		while (pwrt.isAlive() && !pwrt.isReady() && (pwrtTimeout-- > 0)) {
@@ -132,7 +137,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			log(Level.WARN, "got no x-tr-device-info from web app in time - login will probably fail");
 		}
 		log(Level.DEBUG, "x-tr headers: " + pwrt.trHeaders.keySet());
-		
+
 		// got the AWS key maybe within unstable time at beginning
 		// to move our retries to a stable key update interval, we wait a moment here
 		Thread.sleep(1000);
@@ -149,9 +154,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			headers.add(new KeyValue<String, String>("x-tr-platform", "web"));
 		}
 
-		
+
 		// Login step 1: phone number + PIN -> processId, confirmation in the app is requested by the server
-		
+
 		var loginBody = new JSONObject();
 		loginBody.put("phoneNumber", normalizePhoneNumber(user));
 		loginBody.put("pin", passwort);
@@ -177,7 +182,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			throw new ApplicationException("Login Step 1 fehlgeschlagen (HTTP " + response.getHttpStatus() + ")");
 		}
 		collectSessionCookies(response, "Login Step 1");
-		
+
 		var json = response.getJSONObject();
 		log(Level.DEBUG, "Login step 1 response: " + json);
 		String processId = json.optString("processId");
@@ -189,11 +194,11 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		
 		// Login step 2: poll login process until the user confirmed in the app
-		
+
 		log(Level.INFO, "Bitte den Login in der Traderepublic App best\u00E4tigen");
 		// NOTE: if notifyUser() is modal, polling continues after the dialog was closed
 		Application.getCallback().notifyUser("Bitte bestaetige den Login mittels der Traderepublic App");
-		
+
 		long pollStart = System.currentTimeMillis();
 		String loginStatus = "PENDING";
 		while (loginStatus.equalsIgnoreCase("PENDING")) {
@@ -203,7 +208,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			Thread.sleep(LOGIN_POLL_INTERVAL_MS);
 			
 			updateRequestAuthHeaders(headers);
-			response = doRequest(TRADEREP_LOGIN_PROCESS_URL + processId, 
+			response = doRequest(TRADEREP_LOGIN_PROCESS_URL + processId,
 					HttpMethod.GET, headers, "application/json", null);
 			if (response.getHttpStatus() != 200) {
 				// single failed poll (e.g. WAF token just changing) is tolerated, the timeout limits retries
@@ -214,7 +219,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			json = response.getJSONObject();
 			loginStatus = json.optString("status", "PENDING");
 			log(Level.DEBUG, "Login Step 2 poll status: " + loginStatus);
-			
+
 			if (!json.isNull("requiredAction")) {
 				// e.g. further verification step - not supported
 				log(Level.DEBUG, "Login Step 2 response: " + json);
@@ -226,7 +231,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			log(Level.DEBUG, "Login Step 2 response: " + json);
 			throw new ApplicationException("Login nicht best\u00E4tigt (Status " + loginStatus + ")");
 		}
-		
+
 		log(Level.DEBUG, "Login session cookies: " + sessionCookies.keySet());
 		if (!sessionCookies.containsKey("tr_session")) {
 			log(Level.WARN, "no tr_session cookie received - further requests will probably fail");
@@ -264,6 +269,35 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		
 		json = response.getJSONObject();
 		log(Level.DEBUG, "Account Response: " + json);
+		boolean depot = KontoType.WERTPAPIERDEPOT.getValue() == konto.getAccountType();
+		boolean saveDebug = depot && TraderepublicSynchronizeBackend.isDebugEnabled(konto);
+		if (saveDebug) {
+			saveAccountDebug("TR-accounts.json", response);
+		}
+		String securitiesAccountNumber = json.optString("securitiesAccountNumber", null);
+		if (depot && isBlank(securitiesAccountNumber)) {
+			// The switchable-accounts response is not the account settings used by the depot API.
+			log(Level.INFO, "Hole Depotnummer aus den Kontoeinstellungen.");
+			trialCount = 0;
+			do {
+				updateRequestAuthHeaders(headers);
+				response = doRequest(TRADEREP_ACCOUNT_SETTINGS_URL, HttpMethod.GET, headers, "application/json", null);
+				trialCount++;
+				if (response.getHttpStatus() != 200) {
+					Thread.sleep(300);
+				}
+			} while (response.getHttpStatus() != 200 && trialCount < 3);
+			collectSessionCookies(response, "Account settings");
+			if (saveDebug) {
+				saveAccountDebug("TR-account-settings.json", response);
+			}
+			if (response.getHttpStatus() == 200) {
+				securitiesAccountNumber = response.getJSONObject().optString("securitiesAccountNumber", null);
+			}
+			if (isBlank(securitiesAccountNumber)) {
+				log(Level.WARN, "Keine Depotnummer in den Kontoeinstellungen erhalten (HTTP " + response.getHttpStatus() + ")");
+			}
+		}
 		
 		
 		log(Level.INFO, "Saldo und Ums\u00E4tze werden abgerufen...");
@@ -289,7 +323,7 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 		client.getHttpClient().setRequestBufferSize(64 * 1024);
 		String clientVersion = pwrt.trHeaders.getOrDefault("x-tr-app-version", TRADEREP_DEFAULT_CLIENT_VERSION);
 		log(Level.DEBUG, "WSS client version: " + clientVersion);
-		TraderepublicWebSocket socket = new TraderepublicWebSocket(this, clientVersion, untilDate);
+		TraderepublicWebSocket socket = new TraderepublicWebSocket(this, clientVersion, securitiesAccountNumber, untilDate);
 
         try {
         		String awsWafToken = pwrt.awsWafToken;
@@ -338,8 +372,9 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
             if (socket.getRxState() != RxState.FINISHED) {
             	throw new ApplicationException("Synchronisation Timeout");
             }
-            
-            
+            if (KontoType.WERTPAPIERDEPOT.getValue() == konto.getAccountType()) {
+				return new TraderepublicDepotSynchronizeJob(this).process(konto, fetchSaldo, fetchUmsatz, socket);
+            }
             if (fetchSaldo) {
             	boolean foundAccount = false;
             	var accountsCash = socket.getAccountsCash();
@@ -674,6 +709,15 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			return "+49" + phone.substring(1);
 		}
 		return phone;
+	}
+
+	private void saveAccountDebug(String filename, WebResult response) throws java.io.IOException {
+		Path path = Path.of(Application.getConfig().getWorkDir(), filename);
+		JSONObject debug = new JSONObject();
+		debug.put("httpStatus", response.getHttpStatus());
+		debug.put("body", response.getContent());
+		Files.writeString(path, debug.toString(), StandardCharsets.UTF_8);
+		log(Level.INFO, "Kontodaten fuer Debug gespeichert in " + path);
 	}
 
 	private static boolean isBlank(String value) {
