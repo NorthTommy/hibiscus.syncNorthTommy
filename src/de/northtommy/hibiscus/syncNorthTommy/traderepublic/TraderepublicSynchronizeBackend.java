@@ -40,7 +40,7 @@ public class TraderepublicSynchronizeBackend extends SyncNTSynchronizeBackend
 
 			List<String> result = new ArrayList<String>();
 			result.add(META_FIREFOXPATH);
-			result.add(META_NOTHEADLESS + "(true/false)");
+			result.add(META_NOTHEADLESS);
 	        if (KontoType.WERTPAPIERDEPOT.getValue() == konto.getAccountType()) {
 				result.add(META_JSONDATA + "(true/false)");
 			}
