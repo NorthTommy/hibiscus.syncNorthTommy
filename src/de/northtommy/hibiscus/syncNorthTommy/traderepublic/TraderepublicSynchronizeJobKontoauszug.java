@@ -56,6 +56,8 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 	private static final int LOGIN_POLL_INTERVAL_MS = 2000;
 	// max. time for the user to confirm the login in the app (server side expiry is ~2min)
 	private static final int LOGIN_CONFIRM_TIMEOUT_MS = 150000;
+	// max. time to send the same authenticator code to the server
+	private static final int LOGIN_AUTHENTICATOR_TIMEOUT_MS = 5000;
 	
 	private PlayWrightRunnerThread pwrt = null;
 	
@@ -186,15 +188,12 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			throw new ApplicationException("Login Step 1: keine processId erhalten (nicht unterst\u00FCtzter Login-Ablauf)");
 		}
 		log(Level.DEBUG, "Login Step 1 processId: " + processId);
-		
-		
+
 		// Login step 2: poll login process until the user confirmed in the app
-		
-		log(Level.INFO, "Bitte den Login in der Traderepublic App best\u00E4tigen");
-		// NOTE: if notifyUser() is modal, polling continues after the dialog was closed
-		Application.getCallback().notifyUser("Bitte bestaetige den Login mittels der Traderepublic App");
+		log(Level.INFO, "Logging in, check for app or authenticator confirmation.");
 		
 		long pollStart = System.currentTimeMillis();
+		boolean firstPending = true;
 		String loginStatus = "PENDING";
 		while (loginStatus.equalsIgnoreCase("PENDING")) {
 			if ((System.currentTimeMillis() - pollStart) > LOGIN_CONFIRM_TIMEOUT_MS) {
@@ -216,11 +215,34 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
 			log(Level.DEBUG, "Login Step 2 poll status: " + loginStatus);
 			
 			if (!json.isNull("requiredAction")) {
-				// e.g. further verification step - not supported
+				
 				log(Level.DEBUG, "Login Step 2 response: " + json);
+				
+				// Check if required action is authenticator verification
+				if(json.getString("requiredAction").equalsIgnoreCase("AUTHENTICATOR_VERIFICATION"))
+				{
+					DoAuthenticatorVerification(headers, processId);
+					// Continue requesting login status.
+					continue;
+				}
+				
+				// e.g. further verification step - not supported
+				
 				throw new ApplicationException("Login erfordert weitere Aktion (nicht unterst\u00FCtzt): " + json.get("requiredAction"));
 			}
+			
+			if(loginStatus.equalsIgnoreCase("PENDING") && firstPending)
+			{
+				// This was the first time a "PENDING" was received. Notify the user to approve login in app.
+				firstPending = false;
+				
+				log(Level.INFO, "Bitte den Login in der Traderepublic App best\u00E4tigen");
+				// NOTE: if notifyUser() is modal, polling continues after the dialog was closed
+				Application.getCallback().notifyUser("Bitte bestaetige den Login mittels der Traderepublic App");
+			}
 		}
+		
+		
 		// web app treats CONFIRMED and COMPLETED as success
 		if (!loginStatus.equalsIgnoreCase("CONFIRMED") && !loginStatus.equalsIgnoreCase("COMPLETED")) {
 			log(Level.DEBUG, "Login Step 2 response: " + json);
@@ -606,6 +628,105 @@ public class TraderepublicSynchronizeJobKontoauszug extends SyncNTSynchronizeJob
  			} catch (Exception e) {}
         }
 		return true;
+	}
+	
+	private void DoAuthenticatorVerification(ArrayList<KeyValue<String, String>> headers, String processId) throws Exception
+	{		
+		String ErrorStatus = null;
+		while(true)
+		{
+			// Ask user for authenticator code
+			log(Level.INFO, "Bitte den Authenticator-Code eingeben.");
+			String ShowMessage = "Bitte bestaetige den Login mit einem Code aus deinem Authenticator.";
+			if(ErrorStatus != null)
+			{
+				if(ErrorStatus.equalsIgnoreCase("VALIDATION_CODE_INVALID"))
+				{
+					ShowMessage = "Der eingegebene Code war falsch.\r\n"+ShowMessage;
+				}
+				else if(ErrorStatus.equalsIgnoreCase("INVALID_VALUE"))
+				{
+					ShowMessage = "Der eingegebene Code hatte das falsche Format.\r\n"+ShowMessage;
+				}
+			}
+			
+			var Code = Application.getCallback().askPassword(ShowMessage);
+			
+			// Build request
+			var authenticatorBody = new JSONObject();
+			authenticatorBody.put("code", Code);
+			
+			long pollStart = System.currentTimeMillis();
+			boolean abortPoll = false;
+			while (!abortPoll) {
+				// Check timeout
+				if ((System.currentTimeMillis() - pollStart) > LOGIN_AUTHENTICATOR_TIMEOUT_MS) {
+					throw new ApplicationException("Zeitueberschreitung Authenticator-Best\u00E4tigung");
+				}
+				
+				// Post request
+				updateRequestAuthHeaders(headers);
+				WebResult response = doRequest(TRADEREP_LOGIN_PROCESS_URL + processId + "/authenticator-verification", 
+						HttpMethod.POST, headers, "application/json", authenticatorBody.toString());
+				
+				// Check answer
+				switch(response.getHttpStatus())
+				{
+				case 200:
+					log(Level.INFO, "Authenticator-Code akzeptiert.");
+					collectSessionCookies(response, "Login Step Authenticator");
+					return; // Success
+				case 400:
+					var json = response.getJSONObject();
+					
+					log(Level.DEBUG, "Login Step Authenticator response: " + json);
+					
+					var errorArray = json.optJSONArray("errors");
+					if(errorArray == null || errorArray.isEmpty())
+					{
+						throw new ApplicationException("Login fehlgeschlagen (400, but no error)");
+					}
+					abortPoll = true;
+					var firstError = errorArray.getJSONObject(0);
+					var errorID = firstError.optString("errorCode");
+					var errorMsg = firstError.optString("errorMessage");
+					ErrorStatus = errorID;
+					if(errorID.equalsIgnoreCase("VALIDATION_CODE_INVALID"))
+					{
+						log(Level.INFO, "Authenticator code invalid.");
+						// break loop, try again.
+						break;
+					}
+					if(errorID.equalsIgnoreCase("INVALID_VALUE"))
+					{
+						log(Level.INFO, "Authenticator code invalid format.");
+						// break loop, try again.
+						break;
+					}
+					var msg = "Authenticator Error:";
+					if(errorID.isBlank())
+					{
+						msg += "Empty error.";
+					}
+					else
+					{
+						msg += errorID;
+					}
+					if(!errorMsg.isBlank())
+					{
+						msg += " Message: " + errorMsg;
+					}
+					log(Level.INFO, msg);
+					// Break loop to try again.
+					break;
+				default:
+					log(Level.DEBUG, "Login Step Authenticator poll HTTP " + response.getHttpStatus() + ": " + response.getContent());
+					
+					Thread.sleep(LOGIN_POLL_INTERVAL_MS);
+					continue;
+				}
+			}
+		}
 	}
 
 	/**
